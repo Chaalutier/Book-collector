@@ -1,7 +1,10 @@
+import BookCard from "./BookCard";
+import type { Book } from "@/types/book";
+
 export default function BookSection({
   books,
 }: {
-  books: any[];
+  books: Book[];
 }) {
   return (
     <section>
@@ -9,16 +12,7 @@ export default function BookSection({
 
       <p>Découvre, organise et garde une trace de tes lectures</p>
 
-      <label htmlFor="site-search">Rechercher sur le site :</label>
-      <input type="search" id="site-search" name="q" />
-      <button>Rechercher</button>
-
-      {books.map((book) => (
-        <div key={book.id}>
-          <h3>{book.title}</h3>
-          <p>{book.author}</p>
-        </div>
-      ))}
+      {books.map((book) => ( <BookCard key={book.id} book={book} />) )}
     </section>
   );
 }
