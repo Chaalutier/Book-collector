@@ -2,7 +2,7 @@ import type { Book } from "@/types/book";
 
 export default function BookCard({ book }: { book: Book }) {
   return (
-    <div>
+    <div className="rounded-lg border p-4">
       {book.cover_url && (
         <img
           src={book.cover_url}
@@ -11,9 +11,9 @@ export default function BookCard({ book }: { book: Book }) {
         />
       )}
 
-      <h3>Titre: {book.title}</h3>
-      <p>Auteur: {book.author}</p>
-      <p>Nombre de pages: {book.page_count ?? "Non renseigné"}</p>
+      <h3 className="text-lg font-semibold">{book.title}</h3>
+      <p className="text-gray-300">Auteur: {book.author}</p>
+      <p className="text-sm text-gray-200">Nombre de pages: {book.page_count ?? "Nombre de pages non renseigné"}</p>
     </div>
   );
 }
