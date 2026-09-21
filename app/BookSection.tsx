@@ -20,12 +20,25 @@ export default function BookSection({ books }: { books: Book[] }) {
     return `https://covers.openlibrary.org/b/id/${coverId}-M.jpg`;
   };
 
+  const getIsbn = (isbns?: string[]) => {
+    const isbn10 = isbns?.find((isbn) => isbn.length === 10);
+    const isbn13 = isbns?.find((isbn) => isbn.length === 13);
+
+    return {
+      isbn10: isbn10 ?? null,
+      isbn13: isbn13 ?? null,
+    };
+  };
+
   const toBook = (result: OpenLibraryBook) => {
+
+    const { isbn10, isbn13 } = getIsbn(result.isbn)
+
     return {
       title: result.title,
       author: result.author_name?.[0] ?? "Auteur inconnu",
-      isbn10: null,
-      isbn13: null,
+      isbn10: isbn10,
+      isbn13: isbn13,
       cover_url: getCoverUrl(result.cover_i),
       publisher: null,
       published_at: result.first_publish_year
@@ -36,32 +49,49 @@ export default function BookSection({ books }: { books: Book[] }) {
   };
 
   const addBook = async (result: OpenLibraryBook) => {
-    const book = toBook(result);
+  const book = toBook(result);
 
-    const { data, error } = await supabase
+  if (book.isbn13 || book.isbn10) {
+    const { data: existingBooks, error: searchError } = await supabase
       .from("books")
-      .insert(book)
-      .select()
-      .single();
+      .select("id, title, isbn10, isbn13")
+      .or(`isbn13.eq.${book.isbn13},isbn10.eq.${book.isbn10}`);
 
-    if (error) {
-      console.error(error);
+    if (searchError) {
+      console.error(searchError);
       return;
     }
 
-    console.log("Livre ajouté :", data);
-  };
+    if (existingBooks.length > 0) {
+      console.log("Ce livre existe déjà :", existingBooks[0]);
+      return;
+    }
+  }
+
+  const { data, error } = await supabase
+    .from("books")
+    .insert(book)
+    .select()
+    .single();
+
+  if (error) {
+    console.error(error);
+    return;
+  }
+
+  console.log("Livre ajouté :", data);
+};
 
   const searchBooks = async () => {
     const response = await fetch(
-      `https://openlibrary.org/search.json?q=${encodeURIComponent(search)}`
+      `https://openlibrary.org/search.json?q=${encodeURIComponent(
+        search
+      )}&fields=key,title,author_name,first_publish_year,cover_i,isbn`
     );
 
     const data = await response.json();
 
     setSearchResults(data.docs);
-
-    console.log(toBook(data.docs[0]));
   };
 
   const filteredBooks = books.filter(

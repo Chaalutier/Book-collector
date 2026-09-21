@@ -23,7 +23,7 @@ export default async function Home() {
       <h1>Book Collector</h1>
       <p>Ma bibliothèque de livres.</p>
 
-      <BookSection books={books} />
+      <BookSection books={books ?? []} />
     </main>
   );
 }
