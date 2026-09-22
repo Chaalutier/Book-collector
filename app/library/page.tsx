@@ -1,10 +1,16 @@
-import { supabase } from "../../lib/supabase";
+import { createClient } from "../../lib/server";
 import { redirect } from "next/navigation";
+import BookCard from "../components/BookCard";
+import type { Book } from "../../types/book";
 
 export default async function LibraryPage() {
+    const supabase = await createClient();
+
     const {
         data: { user },
     } = await supabase.auth.getUser();
+
+    console.log("Utilisateur côté serveur :", user);
 
     if (!user) {
         redirect("/login");
@@ -29,11 +35,16 @@ export default async function LibraryPage() {
     `)
         .eq("user_id", user.id);
 
+    console.log("Mes livres :", userBooks);
+    console.log("Erreur :", error);
+
     if (error) {
         console.error(error);
 
         return <p>Impossible de charger votre pile à lire.</p>;
     }
+
+    const books = userBooks.map((userBook) => userBook.books as unknown as Book);
 
     return (
         <main className="mx-auto max-w-6xl p-8">
@@ -43,9 +54,11 @@ export default async function LibraryPage() {
                 {userBooks.length} livre(s)
             </p>
 
-            <pre className="mt-8 rounded-lg bg-gray-100 p-4">
-                {JSON.stringify(userBooks, null, 2)}
-            </pre>
+            <div className="mt-8 grid gap-6 sm:grid-cols-2 lg:grid-cols-4">
+                {books.map((book) => (
+                    <BookCard key={book.id} book={book} />
+                ))}
+            </div>
         </main>
     );
 }

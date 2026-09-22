@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import BookCard from "./BookCard";
+import BookCard from "./components/BookCard";
 import type { Book } from "../types/book";
 import type { OpenLibraryBook } from "../types/open-library";
 import { supabase } from "../lib/supabase";
@@ -118,6 +118,27 @@ export default function BookSection({ books }: { books: Book[] }) {
       }
 
       bookId = data.id;
+    }
+
+    const { data: existingUserBook, error: existingUserBookError } =
+      await supabase
+        .from("user_books")
+        .select("id")
+        .eq("user_id", user.id)
+        .eq("book_id", bookId)
+        .maybeSingle();
+
+    if (existingUserBookError) {
+      console.error(
+        "Erreur lors de la vérification du livre :",
+        existingUserBookError
+      );
+      return;
+    }
+
+    if (existingUserBook) {
+      console.log("Ce livre est déjà dans votre bibliothèque.");
+      return;
     }
 
     const { error: userBookError } = await supabase

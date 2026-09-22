@@ -1,12 +1,15 @@
 "use client";
 
 import { useState } from "react";
+import { useRouter } from "next/navigation";
 import { supabase } from "../../lib/supabase";
 
 export default function RegisterPage() {
     const [email, setEmail] = useState("");
     const [password, setPassword] = useState("");
     const [message, setMessage] = useState("");
+
+    const router = useRouter();
 
     const handleSubmit = async (event: React.FormEvent<HTMLFormElement>) => {
         event.preventDefault();
@@ -23,6 +26,9 @@ export default function RegisterPage() {
 
         setMessage("Connexion réussie");
 
+        router.push("/library");
+        router.refresh();
+
         const {
             data: { user },
         } = await supabase.auth.getUser();
@@ -32,7 +38,7 @@ export default function RegisterPage() {
 
     return (
         <main className="mx-auto max-w-md p-8">
-            <h1 className="text-2xl font-bold">Créer un compte</h1>
+            <h1 className="text-2xl font-bold">Me connecter</h1>
 
             <form onSubmit={handleSubmit} className="mt-6 space-y-4">
                 <div>

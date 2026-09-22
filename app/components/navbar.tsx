@@ -18,6 +18,17 @@ export default function Navbar() {
         getUser();
     }, []);
 
+    const handleLogout = async () => {
+        const { error } = await supabase.auth.signOut();
+
+        if (error) {
+            console.error("Erreur lors de la déconnexion :", error);
+            return;
+        }
+
+        setUser(null);
+    };
+
     return (
         <nav className="border-b">
             <div className="mx-auto flex max-w-6xl items-center justify-between p-4">
@@ -27,11 +38,21 @@ export default function Navbar() {
 
                 <div className="flex gap-4">
                     <Link href="/">Accueil</Link>
-                    <Link href="/library">Ma pile à lire</Link>
-                    <Link href="/login">Connexion</Link>
-                    <Link href="/register">Inscription</Link>
 
-                    <p>{user ? "Connecté" : "Non connecté"}</p>
+                    {user ? (
+                        <>
+                            <Link href="/library">Ma pile à lire</Link>
+
+                            <button onClick={handleLogout}>
+                                Déconnexion
+                            </button>
+                        </>
+                    ) : (
+                        <>
+                            <Link href="/login">Connexion</Link>
+                            <Link href="/register">Inscription</Link>
+                        </>
+                    )}
                 </div>
             </div>
         </nav>
