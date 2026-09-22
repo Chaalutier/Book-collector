@@ -48,39 +48,95 @@ export default function BookSection({ books }: { books: Book[] }) {
     };
   };
 
+
   const addBook = async (result: OpenLibraryBook) => {
-  const book = toBook(result);
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
 
-  if (book.isbn13 || book.isbn10) {
-    const { data: existingBooks, error: searchError } = await supabase
-      .from("books")
-      .select("id, title, isbn10, isbn13")
-      .or(`isbn13.eq.${book.isbn13},isbn10.eq.${book.isbn10}`);
-
-    if (searchError) {
-      console.error(searchError);
+    if (!user) {
+      console.error("Aucun utilisateur connecté");
       return;
     }
 
-    if (existingBooks.length > 0) {
-      console.log("Ce livre existe déjà :", existingBooks[0]);
+    console.log("Utilisateur :", user.id);
+
+    const book = toBook(result);
+
+    let bookId: number;
+
+    if (book.isbn13 || book.isbn10) {
+      const filters = [];
+
+      if (book.isbn13) {
+        filters.push(`isbn13.eq.${book.isbn13}`);
+      }
+
+      if (book.isbn10) {
+        filters.push(`isbn10.eq.${book.isbn10}`);
+      }
+
+      const { data: existingBooks, error: searchError } = await supabase
+        .from("books")
+        .select("id, title, isbn10, isbn13")
+        .or(filters.join(","))
+        .limit(1);
+
+      if (searchError) {
+        console.error(searchError);
+        return;
+      }
+
+      if (existingBooks.length > 0) {
+        bookId = existingBooks[0].id;
+        console.log("Livre déjà présent :", existingBooks[0]);
+      } else {
+        const { data, error } = await supabase
+          .from("books")
+          .insert(book)
+          .select()
+          .single();
+
+        if (error) {
+          console.error(error);
+          return;
+        }
+
+        bookId = data.id;
+        console.log("Nouveau livre créé :", data);
+      }
+    } else {
+      const { data, error } = await supabase
+        .from("books")
+        .insert(book)
+        .select()
+        .single();
+
+      if (error) {
+        console.error(error);
+        return;
+      }
+
+      bookId = data.id;
+    }
+
+    const { error: userBookError } = await supabase
+      .from("user_books")
+      .insert({
+        user_id: user.id,
+        book_id: bookId,
+        status: "TO_READ",
+      });
+
+    if (userBookError) {
+      console.error("Erreur user_books :", userBookError);
       return;
     }
-  }
 
-  const { data, error } = await supabase
-    .from("books")
-    .insert(book)
-    .select()
-    .single();
+    console.log("Livre ajouté à ma pile à lire !");
+  };
 
-  if (error) {
-    console.error(error);
-    return;
-  }
 
-  console.log("Livre ajouté :", data);
-};
 
   const searchBooks = async () => {
     const response = await fetch(
