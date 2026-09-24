@@ -12,6 +12,8 @@ export default function BookSection({ books }: { books: Book[] }) {
 
   const [searchResults, setSearchResults] = useState<OpenLibraryBook[]>([]);
 
+  const [addedBooks, setAddedBooks] = useState<string[]>([]);
+
   const getCoverUrl = (coverId?: number) => {
     if (!coverId) {
       return null;
@@ -155,6 +157,7 @@ export default function BookSection({ books }: { books: Book[] }) {
     }
 
     console.log("Livre ajouté à ma pile à lire !");
+    setAddedBooks((current) => [...current, result.key]);
   };
 
 
@@ -231,9 +234,12 @@ export default function BookSection({ books }: { books: Book[] }) {
 
               <button
                 onClick={() => addBook(result)}
-                className="mt-4 w-full rounded-lg bg-black px-4 py-2 text-sm font-medium text-white hover:bg-gray-800"
+                disabled={addedBooks.includes(result.key)}
+                className="mt-4 w-full rounded-lg bg-black px-4 py-2 text-sm font-medium text-white hover:bg-gray-800 disabled:cursor-not-allowed disabled:opacity-50"
               >
-                Ajouter à ma bibliothèque
+                {addedBooks.includes(result.key)
+                  ? "Ajouté ✓"
+                  : "Ajouter à ma bibliothèque"}
               </button>
             </div>
           </div>
