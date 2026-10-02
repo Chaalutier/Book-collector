@@ -1,29 +1,27 @@
-import { supabase } from "../lib/supabase";
-import BookSection from "./BookSection";
+import Link from "next/link";
+import { redirect } from "next/navigation";
+import { getCurrentUser } from "@/lib/library";
 
 export default async function Home() {
-
-  //Récupération du nombre de livres présents en base
-  const {count } = await supabase
-    .from("books")
-    .select("*", { count: "exact" });
-
-  const bookCount = count ?? 0;
-
-  //Récupération du détail des livres
-  const { data: books } = await supabase
-  .from("books")
-  .select("*")
-  .order("created_at", { ascending: false });
-
-  console.log(books);
+  // Connecté : direction la bibliothèque
+  const user = await getCurrentUser();
+  if (user) redirect("/library");
 
   return (
-    <main>
-      <h1>Book Collector</h1>
-      <p>Ma bibliothèque de livres.</p>
-
-      <BookSection books={books ?? []} />
+    <main className="mx-auto flex w-full max-w-3xl flex-1 flex-col items-center justify-center px-4 py-20 text-center">
+      <h1 className="text-4xl font-bold sm:text-5xl">Ta bibliothèque, enfin rangée.</h1>
+      <p className="mt-4 max-w-xl text-lg text-muted">
+        Romans, essais, mangas et BD au même endroit. Suis tes séries tome par tome, ta pile à
+        lire et ta wishlist.
+      </p>
+      <div className="mt-8 flex gap-3">
+        <Link href="/register" className="btn-primary px-6 py-3 text-base">
+          Créer mon compte
+        </Link>
+        <Link href="/login" className="btn-ghost px-6 py-3 text-base">
+          Me connecter
+        </Link>
+      </div>
     </main>
   );
 }

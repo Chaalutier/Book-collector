@@ -1,43 +1,43 @@
 "use client";
 
+import Link from "next/link";
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { supabase } from "../../lib/supabase";
 
-export default function RegisterPage() {
+export default function LoginPage() {
     const [email, setEmail] = useState("");
     const [password, setPassword] = useState("");
-    const [message, setMessage] = useState("");
+    const [error, setError] = useState("");
+    const [pending, setPending] = useState(false);
 
     const router = useRouter();
 
     const handleSubmit = async (event: React.FormEvent<HTMLFormElement>) => {
         event.preventDefault();
+        setError("");
+        setPending(true);
 
-        const { data, error } = await supabase.auth.signInWithPassword({
+        const { error } = await supabase.auth.signInWithPassword({
             email,
             password,
         });
 
+        setPending(false);
+
         if (error) {
             console.error(error);
+            setError("Email ou mot de passe incorrect.");
             return;
         }
 
-        setMessage("Connexion réussie");
-
+        // refresh() relance les Server Components (navbar comprise)
         router.push("/library");
         router.refresh();
-
-        const {
-            data: { user },
-        } = await supabase.auth.getUser();
-
-        console.log("Utilisateur récupéré :", user);
     };
 
     return (
-        <main className="mx-auto max-w-md p-8">
+        <main className="mx-auto w-full max-w-md px-4 py-12">
             <h1 className="text-2xl font-bold">Me connecter</h1>
 
             <form onSubmit={handleSubmit} className="mt-6 space-y-4">
@@ -49,9 +49,11 @@ export default function RegisterPage() {
                     <input
                         id="email"
                         type="email"
+                        required
+                        autoComplete="email"
                         value={email}
                         onChange={(event) => setEmail(event.target.value)}
-                        className="mt-1 w-full rounded-lg border p-2"
+                        className="field mt-1"
                     />
                 </div>
 
@@ -63,23 +65,26 @@ export default function RegisterPage() {
                     <input
                         id="password"
                         type="password"
+                        required
+                        autoComplete="current-password"
                         value={password}
                         onChange={(event) => setPassword(event.target.value)}
-                        className="mt-1 w-full rounded-lg border p-2"
+                        className="field mt-1"
                     />
                 </div>
 
-                <button
-                    type="submit"
-                    className="w-full rounded-lg bg-black px-4 py-2 text-white"
-                >
-                    Me connecter
+                <button type="submit" disabled={pending} className="btn-primary w-full">
+                    {pending ? "Connexion…" : "Me connecter"}
                 </button>
-                {message && (
-                    <p className="mt-4 text-sm">
-                        {message}
-                    </p>
-                )}
+
+                {error && <p className="text-sm text-red-600">{error}</p>}
+
+                <p className="text-sm text-muted">
+                    Pas encore de compte ?{" "}
+                    <Link href="/register" className="underline">
+                        Inscription
+                    </Link>
+                </p>
             </form>
         </main>
     );

@@ -1,36 +1,75 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# Bouck
 
-## Getting Started
+Gestion de ma bibliothèque : romans, essais, mangas et BD.
 
-First, run the development server:
+- Catalogue partagé : livres, **séries** et **tomes**, **plusieurs auteurs** avec leur rôle (scénario, dessin, traduction…)
+- Bibliothèque perso : statut (wishlist, acheté à lire, en cours, lu, abandonné), note, notes, dates de lecture
+- Vue par série avec détection des tomes manquants
+- Recherche via **Google Books** + enrichissement **BnF** (série, n° de tome, auteurs), gratuits
+- Profil : photo, nom affiché, description, statistiques
+
+Stack : Next.js 16 (App Router, Server Actions), React 19, Tailwind 4, Supabase (Auth, Postgres, Storage).
+
+## Installation
+
+### 1. Variables d'environnement (`.env.local`)
 
 ```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
+NEXT_PUBLIC_SUPABASE_URL=https://xxxx.supabase.co
+NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY=sb_publishable_xxx
+
+# Optionnel mais recommandé : sans clé, Google Books limite vite (erreurs 429)
+GOOGLE_BOOKS_API_KEY=AIza...
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+Clé Google Books gratuite (1 000 requêtes/jour) :
+[console.cloud.google.com](https://console.cloud.google.com/) → nouveau projet →
+« API et services » → activer **Books API** → « Identifiants » → **Créer une clé API**.
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+La BnF ne demande pas de clé.
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+### 2. Base de données
 
-## Learn More
+Ouvrir Supabase → **SQL Editor**, coller le contenu de
+`supabase/migrations/20261001000000_bibliotheque_v2.sql` et exécuter.
 
-To learn more about Next.js, take a look at the following resources:
+⚠️ Ce script **repart de zéro** : il supprime les anciennes tables `books` et `user_books`.
+Les comptes utilisateurs sont conservés. Il crée aussi le bucket Storage `avatars`.
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+### 3. Lancer
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+```bash
+npm install
+npm run dev
+```
 
-## Deploy on Vercel
+## Modèle de données
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+| Table               | Rôle                                                               |
+| ------------------- | ------------------------------------------------------------------ |
+| `profiles`          | nom affiché, bio, photo (1 ligne par utilisateur, créée auto)      |
+| `authors`           | personnes (auteur, scénariste, dessinateur…)                       |
+| `series`            | série (titre, catégorie, nb de tomes parus, terminée ?)            |
+| `books`             | une édition (ISBN), sa catégorie, sa série et son n° de tome        |
+| `book_contributors` | lien livre ↔ auteur avec le rôle                                   |
+| `user_books`        | livre dans MA bibliothèque : statut, note, notes, dates            |
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+L'ajout d'un livre passe par la fonction SQL `add_book_to_library(p_book, p_status)` :
+dédoublonnage par ISBN, création de la série et des auteurs, en une transaction.
+
+## Organisation du code
+
+```
+app/
+  actions/          Server Actions (ajout, statut, fiche, série, profil)
+  library/          ma bibliothèque, fiche d'un livre, page série
+  search/           recherche + ajout
+  profile/          profil
+  components/       BookCard, BookCover, StatusSelect, Avatar, navbar
+lib/
+  catalog/          Google Books, BnF, fusion des résultats
+  library.ts        lecture de la bibliothèque depuis Supabase
+  labels.ts         libellés FR (catégories, statuts, rôles)
+supabase/migrations SQL à exécuter dans Supabase
+types/book.ts       types partagés
+```
