@@ -12,7 +12,7 @@ export const BOOK_SELECT = `
 `;
 
 export const USER_BOOK_SELECT = `
-  id, status, rating, notes, started_at, finished_at, created_at, updated_at,
+  id, status, rating, current_page, notes, started_at, finished_at, created_at, updated_at,
   book:books ( ${BOOK_SELECT} )
 `;
 
@@ -97,7 +97,7 @@ export async function getUserSeries(supabase: SupabaseClient, userId: string, se
       .maybeSingle(),
     supabase
       .from("user_books")
-      .select(`id, status, rating, notes, started_at, finished_at, created_at, updated_at, book:books!inner ( ${BOOK_SELECT} )`)
+      .select(`id, status, rating, current_page, notes, started_at, finished_at, created_at, updated_at, book:books!inner ( ${BOOK_SELECT} )`)
       .eq("user_id", userId)
       .eq("book.series_id", seriesId),
   ]);

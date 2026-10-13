@@ -91,7 +91,7 @@ export default function SearchResult({
   return (
     <div className="flex gap-4">
       <div className="w-20 shrink-0 sm:w-24">
-        <BookCover src={draft.cover_url} title={draft.title} />
+        <BookCover src={draft.cover_url} title={draft.title} isbn={draft.isbn13 ?? draft.isbn10} />
       </div>
 
       <div className="min-w-0 flex-1">

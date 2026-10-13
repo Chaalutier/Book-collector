@@ -2,6 +2,7 @@ import type { Metadata, Viewport } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
 import Navbar, { MobileNav } from "./components/navbar";
+import RegisterSW from "./components/RegisterSW";
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -16,6 +17,9 @@ const geistMono = Geist_Mono({
 export const metadata: Metadata = {
   title: "Bouck",
   description: "Gère ta bibliothèque : romans, essais, mangas et BD.",
+  applicationName: "Bouck",
+  appleWebApp: { capable: true, title: "Bouck", statusBarStyle: "default" },
+  icons: { icon: "/favicon.ico", apple: "/icons/icon-192.png" },
 };
 
 export const viewport: Viewport = {
@@ -35,6 +39,7 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
         <Navbar />
         {children}
         <MobileNav />
+        <RegisterSW />
       </body>
     </html>
   );

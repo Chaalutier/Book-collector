@@ -2,7 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
-import { enrichCandidate } from "@/lib/catalog";
+import { enrichCandidate, searchCatalog } from "@/lib/catalog";
 import { findBnfByIsbn } from "@/lib/catalog/bnf";
 import {
   guessCategoryFromSignals,
@@ -11,7 +11,17 @@ import {
   type CategorySignals,
 } from "@/lib/catalog/category";
 import { searchGoogleBooks } from "@/lib/catalog/google-books";
-import { matchExistingSeries, splitSeriesAndTitle } from "@/lib/catalog/utils";
+import {
+  cleanIsbn,
+  cleanSeries,
+  isbn10to13,
+  matchExistingSeries,
+  parseUserDate,
+  splitSeriesAndTitle,
+} from "@/lib/catalog/utils";
+import { getUserBook } from "@/lib/library";
+import { SYNC_FIELDS, type SyncField } from "@/lib/sync-shared";
+import { findCandidatesForBook, type ScoredCandidate } from "@/lib/sync";
 import { createClient } from "@/lib/server";
 import {
   BOOK_CATEGORIES,
@@ -51,8 +61,9 @@ const num = (v: unknown) => {
 function sanitizeCandidate(input: BookCandidate): BookCandidate | null {
   const title = str(input?.title, 300);
   if (!title || !isCategory(input.category)) return null;
+  const series = cleanSeries({ series: str(input.series_title, 200), volume: num(input.volume_number) });
   return {
-    source: input.source === "bnf" ? "bnf" : "google",
+    source: input.source === "bnf" || input.source === "openlibrary" ? input.source : "google",
     category_reasons: Array.isArray(input.category_reasons)
       ? input.category_reasons.filter((r) => typeof r === "string").slice(0, 5).map((r) => r.slice(0, 200))
       : [],
@@ -63,8 +74,8 @@ function sanitizeCandidate(input: BookCandidate): BookCandidate | null {
     subtitle: str(input.subtitle, 300),
     description: str(input.description, 5000),
     category: input.category,
-    series_title: str(input.series_title, 200),
-    volume_number: num(input.volume_number),
+    series_title: series.series,
+    volume_number: series.volume,
     isbn10: str(input.isbn10, 10),
     isbn13: str(input.isbn13, 13),
     cover_url: str(input.cover_url, 1000)?.startsWith("https://") ? str(input.cover_url, 1000) : null,
@@ -207,13 +218,17 @@ export async function updateUserBook(
   const id = Number(formData.get("id"));
   const status = formData.get("status");
   const rating = num(formData.get("rating"));
+  const page = num(formData.get("current_page"));
   if (!isStatus(status)) return { ok: false, error: "Statut invalide." };
+  // Note au demi-point : 0,5 à 5
+  const halfStars = rating !== null && rating >= 0.5 && rating <= 5 ? Math.round(rating * 2) / 2 : null;
 
   const { error } = await supabase
     .from("user_books")
     .update({
       status,
-      rating: rating && rating >= 1 && rating <= 5 ? Math.round(rating) : null,
+      rating: halfStars,
+      current_page: page !== null ? Math.round(page) : null,
       notes: str(formData.get("notes"), 5000),
       started_at: str(formData.get("started_at"), 10),
       finished_at: str(formData.get("finished_at"), 10),
@@ -402,4 +417,233 @@ export async function detectCategory(
 
   const guess = guessCategoryFromSignals(signals);
   return { ok: true, data: { category: guess.category, reasons: guess.reasons } };
+}
+
+/** Remplace la couverture d'un livre (image envoyée dans le bucket « covers ») */
+export async function setBookCover(bookId: number, url: string): Promise<ActionResult> {
+  const { supabase, user } = await requireUser();
+  if (!user) return { ok: false, error: "Non connecté." };
+
+  // Seules les images de notre propre stockage sont acceptées
+  const base = process.env.NEXT_PUBLIC_SUPABASE_URL;
+  if (!base || !url.startsWith(`${base}/storage/v1/object/public/covers/`)) {
+    return { ok: false, error: "Image invalide." };
+  }
+
+  const { data: owned } = await supabase
+    .from("user_books")
+    .select("id")
+    .eq("user_id", user.id)
+    .eq("book_id", bookId)
+    .maybeSingle();
+  if (!owned) return { ok: false, error: "Livre introuvable dans ta bibliothèque." };
+
+  const { error } = await supabase.from("books").update({ cover_url: url }).eq("id", bookId);
+  if (error) {
+    console.error(error);
+    return { ok: false, error: "Impossible d'enregistrer la couverture." };
+  }
+  revalidatePath("/library", "layout");
+  return { ok: true };
+}
+
+/**
+ * Scan d'un code-barres : retrouve le livre à partir de son ISBN
+ * (Google Books + BnF + Open Library) et indique s'il est déjà dans la bibliothèque.
+ */
+export async function lookupIsbn(
+  isbn: string
+): Promise<ActionResult<{ candidate: BookCandidate | null; ownedUserBookId: number | null }>> {
+  const { supabase, user } = await requireUser();
+  if (!user) return { ok: false, error: "Non connecté." };
+
+  const cleaned = cleanIsbn(isbn);
+  if (!cleaned) return { ok: false, error: "ISBN invalide." };
+  const isbn13 = cleaned.length === 13 ? cleaned : isbn10to13(cleaned);
+  const isbn10 = cleaned.length === 10 ? cleaned : null;
+
+  // Déjà dans la bibliothèque ? (on évite alors tout appel externe)
+  const { data: books } = await supabase
+    .from("books")
+    .select("id, isbn13, isbn10")
+    .or(isbn10 ? `isbn13.eq.${isbn13},isbn10.eq.${isbn10}` : `isbn13.eq.${isbn13}`);
+  const bookIds = ((books ?? []) as { id: number }[]).map((b) => b.id);
+  if (bookIds.length > 0) {
+    const { data: owned } = await supabase
+      .from("user_books")
+      .select("id")
+      .eq("user_id", user.id)
+      .in("book_id", bookIds)
+      .maybeSingle();
+    if (owned) {
+      const found = await searchCatalog(isbn13).catch(() => null);
+      return { ok: true, data: { candidate: found?.results[0] ?? null, ownedUserBookId: owned.id } };
+    }
+  }
+
+  const { results } = await searchCatalog(isbn13);
+  const match =
+    results.find((r) => r.isbn13 === isbn13 || (isbn10 && r.isbn10 === isbn10)) ?? results[0] ?? null;
+  if (!match) return { ok: true, data: { candidate: null, ownedUserBookId: null } };
+
+  const clean = sanitizeCandidate(match);
+  if (!clean) return { ok: true, data: { candidate: null, ownedUserBookId: null } };
+  const candidate = await alignWithExistingSeries(supabase, { ...clean, isbn13: clean.isbn13 ?? isbn13 });
+  return { ok: true, data: { candidate, ownedUserBookId: null } };
+}
+
+/* ------------------------------------------------------------------
+   Ajout manuel + synchro d'une fiche provisoire avec les catalogues
+   ------------------------------------------------------------------ */
+
+/** Ajoute un livre saisi à la main (seul le titre est obligatoire) */
+export async function addManualBook(_prev: ActionResult | null, formData: FormData): Promise<ActionResult> {
+  const { supabase, user } = await requireUser();
+  if (!user) return { ok: false, error: "Connecte-toi pour ajouter des livres." };
+
+  const title = str(formData.get("title"), 300);
+  const category = formData.get("category");
+  const status = formData.get("status");
+  if (!title) return { ok: false, error: "Le titre est obligatoire." };
+  if (!isCategory(category)) return { ok: false, error: "Catégorie invalide." };
+  if (!isStatus(status)) return { ok: false, error: "Statut invalide." };
+
+  const rawDate = str(formData.get("published_date"), 40);
+  const publishedDate = parseUserDate(rawDate);
+  if (publishedDate === undefined) {
+    return { ok: false, error: "Date non reconnue. Exemples : 05/11/2026, 11/2026, novembre 2026 ou 2026." };
+  }
+
+  const isbn = cleanIsbn(str(formData.get("isbn"), 20));
+  if (str(formData.get("isbn"), 20) && !isbn) return { ok: false, error: "ISBN invalide (10 ou 13 chiffres)." };
+
+  const authors = (str(formData.get("authors"), 500) ?? "")
+    .split(/[,;\n]+/)
+    .map((n) => n.trim())
+    .filter(Boolean);
+
+  const candidate: BookCandidate = {
+    source: "google",
+    google_books_id: null,
+    bnf_ark: null,
+    title,
+    subtitle: null,
+    description: str(formData.get("description"), 5000),
+    category,
+    series_title: str(formData.get("series_title"), 200),
+    volume_number: num(formData.get("volume_number")),
+    isbn10: isbn && isbn.length === 10 ? isbn : null,
+    isbn13: isbn ? (isbn.length === 13 ? isbn : isbn10to13(isbn)) : null,
+    cover_url: null,
+    publisher: str(formData.get("publisher"), 200),
+    published_date: publishedDate,
+    page_count: null,
+    language: "fr",
+    contributors: authors.map((name) => ({ name, role: "author" as const })),
+  };
+
+  const clean = sanitizeCandidate(candidate);
+  if (!clean) return { ok: false, error: "Livre invalide." };
+  const aligned = await alignWithExistingSeries(supabase, clean);
+  const { source: _s, category_reasons: _r, category_signals: _g, ...payload } = aligned;
+  void _s;
+  void _r;
+  void _g;
+
+  const { data: row, error } = await supabase
+    .rpc("add_book_to_library", { p_book: payload, p_status: status })
+    .single();
+  const data = row as { user_book_id: number } | null;
+  if (error || !data) {
+    console.error("add_book_to_library (manuel) :", error);
+    return { ok: false, error: "Impossible d'ajouter ce livre." };
+  }
+
+  revalidatePath("/library", "layout");
+  revalidatePath("/calendar");
+  // Retour au calendrier si l'ajout est parti de là (valeur contrôlée, pas d'URL libre)
+  redirect(formData.get("back") === "calendar" ? "/calendar" : `/library/${data.user_book_id}`);
+}
+
+/** Propositions des catalogues pour compléter une fiche de la bibliothèque */
+export async function findMatches(
+  userBookId: number,
+  query?: string
+): Promise<ActionResult<ScoredCandidate[]>> {
+  const { supabase, user } = await requireUser();
+  if (!user) return { ok: false, error: "Non connecté." };
+  const userBook = await getUserBook(supabase, user.id, userBookId);
+  if (!userBook) return { ok: false, error: "Livre introuvable." };
+  try {
+    return { ok: true, data: await findCandidatesForBook(userBook.book, query) };
+  } catch (error) {
+    console.error("findMatches :", error);
+    return { ok: false, error: "Les catalogues ne répondent pas, réessaie dans un instant." };
+  }
+}
+
+/**
+ * Applique à la fiche les champs choisis d'un résultat de catalogue.
+ * Renvoie l'id du user_book (qui change si la fiche fusionne avec une fiche existante).
+ */
+export async function applySync(
+  userBookId: number,
+  candidate: BookCandidate,
+  fields: string[]
+): Promise<ActionResult<{ userBookId: number; merged: boolean }>> {
+  const { supabase, user } = await requireUser();
+  if (!user) return { ok: false, error: "Non connecté." };
+
+  const userBook = await getUserBook(supabase, user.id, userBookId);
+  if (!userBook) return { ok: false, error: "Livre introuvable." };
+  const clean = sanitizeCandidate(candidate);
+  if (!clean) return { ok: false, error: "Résultat invalide." };
+
+  const chosen = new Set(fields.filter((f): f is SyncField => (SYNC_FIELDS as readonly string[]).includes(f)));
+  if (chosen.size === 0) return { ok: false, error: "Coche au moins une information à reprendre." };
+
+  const data: Record<string, unknown> = {};
+  if (chosen.has("isbn")) {
+    data.isbn10 = clean.isbn10;
+    data.isbn13 = clean.isbn13;
+    data.google_books_id = clean.google_books_id;
+    data.bnf_ark = clean.bnf_ark;
+    if (clean.language) data.language = clean.language;
+  }
+  if (chosen.has("cover_url") && clean.cover_url) data.cover_url = clean.cover_url;
+  if (chosen.has("published_date") && clean.published_date) data.published_date = clean.published_date;
+  if (chosen.has("publisher") && clean.publisher) data.publisher = clean.publisher;
+  if (chosen.has("page_count") && clean.page_count) data.page_count = clean.page_count;
+  if (chosen.has("description") && clean.description) data.description = clean.description;
+  if (chosen.has("title")) data.title = clean.title;
+  if (chosen.has("contributors") && clean.contributors.length > 0) {
+    data.contributors = clean.contributors;
+    data.replace_contributors = true;
+  }
+  if (Object.keys(data).length === 0) return { ok: false, error: "Rien à mettre à jour." };
+
+  const { data: row, error } = await supabase
+    .rpc("sync_book", { p_book_id: userBook.book.id, p_data: data })
+    .single();
+  const result = row as { book_id: number; merged: boolean; user_book_id: number } | null;
+  if (error || !result) {
+    console.error("sync_book :", error);
+    const missing = error?.code === "PGRST202" || error?.code === "42883";
+    return {
+      ok: false,
+      error: missing
+        ? "Fonction manquante : exécute la migration 20261015000000_synchro_fiche.sql dans Supabase."
+        : error?.code === "23505"
+          ? "Ce livre est déjà dans ta bibliothèque (une autre fiche porte cet ISBN)."
+          : "Synchronisation impossible.",
+    };
+  }
+
+  revalidatePath("/library", "layout");
+  revalidatePath("/calendar");
+  return {
+    ok: true,
+    data: { userBookId: result.user_book_id, merged: result.merged },
+    message: result.merged ? "Rattaché à la fiche existante du catalogue." : "Fiche mise à jour.",
+  };
 }

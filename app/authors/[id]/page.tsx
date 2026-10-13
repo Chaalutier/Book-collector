@@ -1,12 +1,14 @@
 import Link from "next/link";
 import { Suspense } from "react";
 import { notFound, redirect } from "next/navigation";
+import BookLoader from "@/app/components/BookLoader";
 import ExternalWorks from "@/app/components/ExternalWorks";
 import WorksGrid from "@/app/components/WorksGrid";
 import { searchByAuthor } from "@/lib/catalog";
 import { ROLE_LABELS } from "@/lib/labels";
 import { getAuthorWorks, getCurrentUser } from "@/lib/library";
 import { createClient } from "@/lib/server";
+import OriginForm from "./OriginForm";
 
 export default async function AuthorPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
@@ -21,6 +23,9 @@ export default async function AuthorPage({ params }: { params: Promise<{ id: str
   if (!data) notFound();
 
   const { author, roles, works } = data;
+  // Colonne ajoutée par une migration : on ignore l'erreur si elle n'existe pas encore
+  const { data: originRow } = await supabase.from("authors").select("origin").eq("id", authorId).maybeSingle();
+  const origin = (originRow as { origin?: string | null } | null)?.origin ?? null;
   const myWorks = works.filter((w) => w.mine);
   const mineCount = myWorks.length;
   const publishers = [...new Set(works.map((w) => w.book.publisher).filter((p): p is string => !!p))];
@@ -38,6 +43,7 @@ export default async function AuthorPage({ params }: { params: Promise<{ id: str
           {roles.map((r) => ROLE_LABELS[r]).join(", ")} · {works.length} livre{works.length > 1 ? "s" : ""} au catalogue
           · {mineCount} dans ma bibliothèque
         </p>
+        <OriginForm authorId={author.id} origin={origin} />
         {publishers.length > 0 && (
           <p className="mt-2 flex flex-wrap gap-2 text-sm">
             <span className="text-muted">Publié chez</span>
@@ -64,7 +70,7 @@ export default async function AuthorPage({ params }: { params: Promise<{ id: str
       <section className="mt-10">
         <h2 className="text-lg font-semibold">Autres œuvres</h2>
         <p className="mb-4 text-sm text-muted">Trouvées sur Google Books et à la BnF.</p>
-        <Suspense fallback={<p className="text-sm text-muted">Recherche de ses œuvres…</p>}>
+        <Suspense fallback={<BookLoader label="Recherche de ses œuvres…" />}>
           <ExternalWorks search={searchByAuthor(author.name)} userId={user.id} />
         </Suspense>
       </section>

@@ -4,8 +4,11 @@ import { removeFromLibrary } from "@/app/actions/library";
 import BookCover from "@/app/components/BookCover";
 import { CATEGORY_LABELS, ROLE_LABELS, formatDate, formatVolume } from "@/lib/labels";
 import { getCurrentUser, getUserBook } from "@/lib/library";
+import { isProvisional } from "@/lib/sync-shared";
 import { createClient } from "@/lib/server";
+import CoverUpload from "./CoverUpload";
 import BookInfoForm from "./BookInfoForm";
+import SyncPanel from "./SyncPanel";
 import UserBookForm from "./UserBookForm";
 
 export default async function UserBookPage({ params }: { params: Promise<{ id: string }> }) {
@@ -22,6 +25,7 @@ export default async function UserBookPage({ params }: { params: Promise<{ id: s
 
   const { book } = userBook;
   const volume = formatVolume(book.volume_number);
+  const provisional = isProvisional(book);
 
   return (
     <main className="mx-auto w-full max-w-5xl px-4 py-8">
@@ -31,7 +35,9 @@ export default async function UserBookPage({ params }: { params: Promise<{ id: s
 
       <div className="mt-6 grid gap-8 md:grid-cols-[180px_1fr]">
         <div className="mx-auto w-40 md:w-full">
-          <BookCover src={book.cover_url} title={book.title} />
+          <CoverUpload bookId={book.id} userId={user.id}>
+            <BookCover src={book.cover_url} title={book.title} isbn={book.isbn13 ?? book.isbn10} />
+          </CoverUpload>
         </div>
 
         <div className="min-w-0">
@@ -99,6 +105,18 @@ export default async function UserBookPage({ params }: { params: Promise<{ id: s
             <h2 className="font-semibold">Ma lecture</h2>
             <UserBookForm userBook={userBook} />
           </section>
+
+          <details id="completer" open={provisional} className="mt-4 rounded-xl border border-line bg-card p-5">
+            <summary className="cursor-pointer font-semibold">
+              {provisional ? "Fiche provisoire : compléter depuis les catalogues" : "Mettre à jour depuis les catalogues"}
+            </summary>
+            <p className="mt-2 text-sm text-muted">
+              {provisional
+                ? "Ce livre a été ajouté à la main. Dès qu'il est référencé (ISBN, couverture, date exacte), retrouve-le ici et choisis les infos à reprendre."
+                : "Recharge l'ISBN, la couverture, la date ou les auteurs depuis Google Books et la BnF."}
+            </p>
+            <SyncPanel userBookId={userBook.id} book={book} provisional={provisional} />
+          </details>
 
           <details className="mt-4 rounded-xl border border-line bg-card p-5">
             <summary className="cursor-pointer font-semibold">Corriger la fiche (titre, catégorie, série, tome)</summary>

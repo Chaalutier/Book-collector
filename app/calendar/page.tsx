@@ -1,76 +1,97 @@
 import Link from "next/link";
 import { Suspense } from "react";
 import { redirect } from "next/navigation";
-import BookCover from "@/app/components/BookCover";
-import SearchResult from "@/app/search/SearchResult";
-import { getCalendar, type CalendarEntry, type CalendarReason } from "@/lib/calendar";
-import { STATUS_STYLES, formatContributors, formatVolume } from "@/lib/labels";
+import BookLoader from "@/app/components/BookLoader";
+import { getCalendar, type CalendarEntry } from "@/lib/calendar";
 import { getCurrentUser, getOwnedIndex, getUserLibrary } from "@/lib/library";
 import { createClient } from "@/lib/server";
+import EntryCard from "./EntryCard";
+import MonthGrid from "./MonthGrid";
+import ViewSwitch from "./ViewSwitch";
+import { monthSummary } from "./summary";
 
-const REASON_STYLES: Record<CalendarReason["kind"], string> = {
-  wishlist: STATUS_STYLES.wishlist,
-  series: "bg-soft text-accent-strong",
-  author: "bg-[#f5ecd7] text-[#76561a]",
-};
+type View = "list" | "grid";
 
-function monthKey(date: string) {
-  return date.slice(0, 7).length === 7 ? date.slice(0, 7) : `${date}-00`;
+const MONTHS = [
+  "Janvier", "Février", "Mars", "Avril", "Mai", "Juin",
+  "Juillet", "Août", "Septembre", "Octobre", "Novembre", "Décembre",
+];
+
+type MonthGroup = { month: number; entries: CalendarEntry[] }; // month 0 = mois à préciser
+type YearGroup = { year: number; months: MonthGroup[] };
+
+/** Regroupe par année puis par mois (les dates triées arrivent déjà dans l'ordre) */
+function groupByYearMonth(entries: CalendarEntry[]): YearGroup[] {
+  const years = new Map<number, Map<number, CalendarEntry[]>>();
+  for (const e of entries) {
+    const year = Number(e.date.slice(0, 4));
+    const month = e.date.length >= 7 ? Number(e.date.slice(5, 7)) : 0;
+    const months = years.get(year) ?? new Map<number, CalendarEntry[]>();
+    months.set(month, [...(months.get(month) ?? []), e]);
+    years.set(year, months);
+  }
+  return [...years.entries()]
+    .sort(([a], [b]) => a - b)
+    .map(([year, months]) => ({
+      year,
+      months: [...months.entries()].sort(([a], [b]) => a - b).map(([month, list]) => ({ month, entries: list })),
+    }));
 }
 
-function monthLabel(key: string) {
-  const [y, m] = key.split("-");
-  if (m === "00") return `${y} — date à préciser`;
-  const label = new Date(Date.UTC(Number(y), Number(m) - 1, 1)).toLocaleDateString("fr-FR", {
-    month: "long",
-    year: "numeric",
-    timeZone: "UTC",
-  });
-  return label.charAt(0).toUpperCase() + label.slice(1);
-}
-
-function dayLabel(date: string) {
-  if (date.length < 10) return date.length === 7 ? "Jour à confirmer" : "Date à confirmer";
-  return new Date(`${date}T00:00:00Z`).toLocaleDateString("fr-FR", {
-    weekday: "long",
-    day: "numeric",
-    month: "long",
-    timeZone: "UTC",
-  });
-}
-
-export default async function CalendarPage() {
+export default async function CalendarPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ view?: string }>;
+}) {
+  const { view: requested } = await searchParams;
   const supabase = await createClient();
   const user = await getCurrentUser(supabase);
   if (!user) redirect("/login");
 
+  // Vue demandée dans l'URL, sinon celle enregistrée dans le profil (liste par défaut)
+  let view: View = "list";
+  if (requested === "grid" || requested === "list") {
+    view = requested;
+  } else {
+    const { data } = await supabase.from("profiles").select("calendar_view").eq("id", user.id).maybeSingle();
+    if ((data as { calendar_view?: string } | null)?.calendar_view === "grid") view = "grid";
+  }
+
   return (
     <main className="mx-auto w-full max-w-4xl px-4 py-8">
-      <h1 className="text-3xl font-bold">Calendrier des sorties</h1>
-      <p className="mt-1 text-sm text-muted">
-        Prochains tomes de tes séries, livres de ta wishlist et nouveautés des auteurs que tu lis.
-      </p>
-      <Suspense fallback={<p className="mt-8 text-sm text-muted">Recherche des prochaines sorties…</p>}>
-        <CalendarContent userId={user.id} />
+      <div className="flex flex-wrap items-end justify-between gap-3">
+        <div>
+          <h1 className="text-3xl font-bold">Calendrier des sorties</h1>
+          <p className="mt-1 text-sm text-muted">
+            Prochains tomes de tes séries, livres de ta bibliothèque pas encore sortis et nouveautés des auteurs que
+            tu lis.
+          </p>
+        </div>
+        <ViewSwitch view={view} />
+      </div>
+      <Link href="/search/manual?to=wishlist&back=calendar" className="btn-primary mt-5 w-full justify-center sm:w-auto">
+        + Ajouter une sortie
+      </Link>
+      <Suspense key={view} fallback={<BookLoader label="Recherche des prochaines sorties…" />}>
+        <CalendarContent userId={user.id} view={view} />
       </Suspense>
     </main>
   );
 }
 
-async function CalendarContent({ userId }: { userId: string }) {
+async function CalendarContent({ userId, view }: { userId: string; view: View }) {
   const supabase = await createClient();
   const [userBooks, owned] = await Promise.all([getUserLibrary(supabase, userId), getOwnedIndex(supabase, userId)]);
   const { entries, tracked, failures } = await getCalendar(userBooks, owned);
-
-  const months = new Map<string, CalendarEntry[]>();
-  for (const e of entries) months.set(monthKey(e.date), [...(months.get(monthKey(e.date)) ?? []), e]);
+  const years = groupByYearMonth(entries);
+  const today = new Date().toISOString().slice(0, 10);
 
   return (
     <>
       <p className="mt-4 text-xs text-muted">
         Suivi : {tracked.series} série{tracked.series > 1 ? "s" : ""} en cours, {tracked.authors} auteur
-        {tracked.authors > 1 ? "s" : ""}, {tracked.wishlist} livre{tracked.wishlist > 1 ? "s" : ""} de la wishlist à
-        paraître.
+        {tracked.authors > 1 ? "s" : ""}, {tracked.wishlist} livre{tracked.wishlist > 1 ? "s" : ""} de ta
+        bibliothèque à paraître.
       </p>
 
       {failures > 0 && (
@@ -80,67 +101,46 @@ async function CalendarContent({ userId }: { userId: string }) {
         </p>
       )}
 
-      {entries.length === 0 ? (
+      {view === "grid" ? (
+        <MonthGrid entries={entries} today={today} />
+      ) : entries.length === 0 ? (
         <div className="mt-10 rounded-xl border border-dashed border-line p-8 text-center text-sm text-muted">
           <p className="text-base font-medium text-foreground">Aucune sortie annoncée pour le moment.</p>
           <p className="mt-2">
             Les dates viennent de Google Books, qui ne connaît un livre à l&apos;avance que si l&apos;éditeur l&apos;a
-            déjà référencé. Reviens régulièrement, ou ajoute à ta{" "}
+            déjà référencé. Reviens régulièrement, ajoute à ta{" "}
             <Link href="/library?status=wishlist" className="underline">
               wishlist
             </Link>{" "}
-            des livres déjà annoncés.
+            des livres déjà annoncés, ou{" "}
+            <Link href="/search/manual?to=wishlist" className="underline">
+              ajoute-en un à la main
+            </Link>{" "}
+            avec sa date de sortie.
           </p>
         </div>
       ) : (
-        [...months.entries()].map(([key, list]) => (
-          <section key={key} className="mt-8">
-            <h2 className="border-b border-line pb-2 text-lg font-semibold">{monthLabel(key)}</h2>
-            <ul className="divide-y divide-line">
-              {list.map((entry) => (
-                <li key={entry.key} className="py-4">
-                  <div className="mb-2 flex flex-wrap items-center gap-2 text-xs">
-                    <span className="font-medium capitalize">{dayLabel(entry.date)}</span>
-                    {entry.reasons.map((r) => (
-                      <span key={`${r.kind}-${r.label}`} className={`rounded-full px-2 py-0.5 ${REASON_STYLES[r.kind]}`}>
-                        {r.label}
-                      </span>
-                    ))}
-                  </div>
-                  {entry.userBook ? <WishlistRow entry={entry} /> : <SearchResult candidate={entry.candidate!} ownedUserBookId={null} />}
-                </li>
-              ))}
-            </ul>
+        years.map(({ year, months }) => (
+          <section key={year} className="mt-12 first:mt-8">
+            <h2 className="border-b-2 border-foreground pb-1 text-5xl font-bold tracking-tight">{year}</h2>
+            {months.map(({ month, entries: list }) => (
+              <div key={month} className="mt-8">
+                <h3 className="text-sm font-semibold uppercase tracking-widest text-accent-strong">
+                  {month === 0 ? "Date à préciser" : MONTHS[month - 1]}
+                </h3>
+                <p className="mb-3 mt-0.5 text-xs text-muted">{monthSummary(list)}</p>
+                <ul className="divide-y divide-line">
+                  {list.map((entry) => (
+                    <li key={entry.key} className="py-4">
+                      <EntryCard entry={entry} />
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            ))}
           </section>
         ))
       )}
     </>
-  );
-}
-
-function WishlistRow({ entry }: { entry: CalendarEntry }) {
-  const { book, id } = entry.userBook!;
-  const volume = formatVolume(book.volume_number);
-  return (
-    <div className="flex gap-4">
-      <Link href={`/library/${id}`} className="block w-20 shrink-0 sm:w-24">
-        <BookCover src={book.cover_url} title={book.title} />
-      </Link>
-      <div className="min-w-0 flex-1">
-        {book.series && (
-          <p className="text-xs font-medium text-accent-strong">
-            {book.series.title}
-            {volume && ` · ${volume}`}
-          </p>
-        )}
-        <Link href={`/library/${id}`} className="font-semibold hover:underline">
-          {book.title}
-        </Link>
-        <p className="text-sm text-muted">
-          {formatContributors(book.contributors)}
-          {book.publisher && ` · ${book.publisher}`}
-        </p>
-      </div>
-    </div>
   );
 }

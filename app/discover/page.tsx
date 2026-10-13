@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { Suspense } from "react";
 import { redirect } from "next/navigation";
+import BookLoader from "@/app/components/BookLoader";
 import ExternalWorks from "@/app/components/ExternalWorks";
 import { searchByTheme } from "@/lib/catalog";
 import { THEMES, findTheme } from "@/lib/catalog/themes";
@@ -92,7 +93,7 @@ export default async function DiscoverPage({
           <div className="mt-4">
             <Suspense
               key={`${theme.slug}|${sort}|${page}`}
-              fallback={<p className="text-sm text-muted">Recherche de livres…</p>}
+              fallback={<BookLoader label="Recherche de livres…" />}
             >
               <ThemeResults
                 slug={theme.slug}

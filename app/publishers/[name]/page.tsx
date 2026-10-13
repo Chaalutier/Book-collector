@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { Suspense } from "react";
 import { notFound, redirect } from "next/navigation";
+import BookLoader from "@/app/components/BookLoader";
 import ExternalWorks from "@/app/components/ExternalWorks";
 import WorksGrid from "@/app/components/WorksGrid";
 import { searchByPublisher } from "@/lib/catalog";
@@ -79,7 +80,7 @@ export default async function PublisherPage({ params }: { params: Promise<{ name
       <section className="mt-10">
         <h2 className="text-lg font-semibold">Autres livres</h2>
         <p className="mb-4 text-sm text-muted">Les plus récents, trouvés sur Google Books et à la BnF.</p>
-        <Suspense fallback={<p className="text-sm text-muted">Recherche de ses livres…</p>}>
+        <Suspense fallback={<BookLoader label="Recherche de ses livres…" />}>
           <ExternalWorks search={searchByPublisher(displayName)} userId={user.id} />
         </Suspense>
       </section>

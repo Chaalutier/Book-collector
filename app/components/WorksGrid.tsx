@@ -9,7 +9,7 @@ export default function WorksGrid({ works }: { works: CatalogWork[] }) {
     <div className="book-grid">
       {works.map(({ book, mine }) => {
         const volume = formatVolume(book.volume_number);
-        const cover = <BookCover src={book.cover_url} title={book.title} />;
+        const cover = <BookCover src={book.cover_url} title={book.title} isbn={book.isbn13 ?? book.isbn10} />;
         return (
           <article key={book.id} className="group flex flex-col gap-2">
             {mine ? (

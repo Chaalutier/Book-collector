@@ -2,6 +2,7 @@ import type { BookCandidate } from "@/types/book";
 import { findBnfByIsbn, searchBnf, searchBnfByAuthor, searchBnfByPublisher } from "./bnf";
 import { guessCategoryFromSignals, mergeSignals } from "./category";
 import { searchGoogleBooks } from "./google-books";
+import { searchOpenLibrary } from "./open-library";
 import type { Theme } from "./themes";
 import { looksLikeIsbn, normalizeTitle } from "./utils";
 
@@ -45,15 +46,34 @@ export async function searchCatalog(query: string): Promise<CatalogSearchResult>
         : [{ ...fromBnf, cover_url: openLibraryCover(fromBnf.isbn13) }];
   }
 
-  // Rien chez Google ? On tente la BnF en plein texte
+  // Rien chez Google ? On tente la BnF en plein texte, puis Open Library
   if (results.length === 0 && !isbn) {
     try {
       const fromBnf = await searchBnf(q);
       results = fromBnf.map((r) => ({ ...r, cover_url: openLibraryCover(r.isbn13) }));
     } catch (error) {
       console.error("BnF :", error);
-      warnings.push("La BnF est indisponible pour le moment.");
     }
+  }
+  if (results.length === 0) {
+    try {
+      results = await searchOpenLibrary(q, { isbn });
+    } catch (error) {
+      console.error("Open Library :", error);
+    }
+  }
+
+  // Un seul message clair, et seulement si on n'a vraiment rien pu afficher
+  if (results.length === 0 && warnings.length > 0) {
+    warnings.length = 0;
+    warnings.push(
+      "Les catalogues en ligne ne répondent pas pour le moment (quota ou connexion). Réessaie dans quelques instants."
+    );
+  } else if (results.length > 0 && google.status === "rejected") {
+    warnings.length = 0;
+    warnings.push("Google Books est indisponible : résultats issus de la BnF et d'Open Library (sans résumé).");
+  } else {
+    warnings.length = 0;
   }
 
   return { results: sortBySeries(dedupe(results), q), warnings };

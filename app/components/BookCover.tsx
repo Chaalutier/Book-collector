@@ -2,19 +2,29 @@
 
 import { useState } from "react";
 
-/** Couverture avec repli propre si l'image est absente ou cassée */
+/**
+ * Couverture avec repli automatique : image enregistrée → Open Library (par ISBN)
+ * → carte colorée avec le titre.
+ */
 export default function BookCover({
   src,
   title,
+  isbn,
   className = "",
 }: {
   src: string | null;
   title: string;
+  /** ISBN : sert à tenter Open Library si l'image principale manque ou est cassée */
+  isbn?: string | null;
   className?: string;
 }) {
-  const [failed, setFailed] = useState(false);
+  const sources = [src, isbn ? `https://covers.openlibrary.org/b/isbn/${isbn}-M.jpg?default=false` : null].filter(
+    (s, i, all): s is string => !!s && all.indexOf(s) === i
+  );
+  const [attempt, setAttempt] = useState(0);
+  const current = sources[attempt];
 
-  if (!src || failed) {
+  if (!current) {
     return (
       <div
         className={`flex aspect-[2/3] items-center justify-center rounded-md bg-line p-3 text-center text-xs text-muted ${className}`}
@@ -27,10 +37,12 @@ export default function BookCover({
   return (
     // eslint-disable-next-line @next/next/no-img-element -- images de domaines externes variés
     <img
-      src={src}
+      // key : repart d'un état propre quand l'image change
+      key={current}
+      src={current}
       alt={`Couverture de ${title}`}
       loading="lazy"
-      onError={() => setFailed(true)}
+      onError={() => setAttempt((n) => n + 1)}
       className={`aspect-[2/3] w-full rounded-md bg-line object-cover shadow-sm ${className}`}
     />
   );

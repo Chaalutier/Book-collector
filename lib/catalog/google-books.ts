@@ -1,4 +1,5 @@
 import type { BookCandidate } from "@/types/book";
+import { fetchWithRetry } from "./http";
 import { guessCategoryFromSignals, type CategorySignals } from "./category";
 import {
   cleanIsbn,
@@ -146,15 +147,12 @@ export async function searchGoogleBooks(
   const key = process.env.GOOGLE_BOOKS_API_KEY;
   if (key) params.set("key", key);
 
-  const response = await fetch(`${GOOGLE_BOOKS_URL}?${params}`, {
+  // Les recherches se répètent beaucoup : on garde les réponses 6 h (ISBN : 7 jours)
+  const response = await fetchWithRetry(`${GOOGLE_BOOKS_URL}?${params}`, {
     headers: { Accept: "application/json" },
-    signal: AbortSignal.timeout(8000),
-    ...(revalidate ? { next: { revalidate } } : {}),
+    revalidate: revalidate ?? (isbn ? 7 * 24 * 3600 : 6 * 3600),
+    label: "Google Books",
   });
-
-  if (!response.ok) {
-    throw new Error(`Google Books a répondu ${response.status}`);
-  }
 
   const data = (await response.json()) as GoogleSearchResponse;
   return (data.items ?? [])

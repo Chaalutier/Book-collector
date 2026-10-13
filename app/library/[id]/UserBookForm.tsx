@@ -3,6 +3,7 @@
 import { useActionState } from "react";
 import { updateUserBook, type ActionResult } from "@/app/actions/library";
 import { STATUS_DESCRIPTIONS } from "@/lib/labels";
+import StarRating from "@/app/components/StarRating";
 import { READING_STATUSES, type UserBook } from "@/types/book";
 
 export default function UserBookForm({ userBook }: { userBook: UserBook }) {
@@ -23,17 +24,26 @@ export default function UserBookForm({ userBook }: { userBook: UserBook }) {
         </select>
       </label>
 
-      <label className="text-sm">
+      <div className="text-sm sm:col-span-2">
         Note
-        <select name="rating" defaultValue={userBook.rating ?? ""} className="field mt-1">
-          <option value="">—</option>
-          {[1, 2, 3, 4, 5].map((n) => (
-            <option key={n} value={n}>
-              {"★".repeat(n)}
-              {"☆".repeat(5 - n)}
-            </option>
-          ))}
-        </select>
+        <StarRating name="rating" defaultValue={userBook.rating} />
+      </div>
+
+      <label className="text-sm sm:col-span-2">
+        Page où je me suis arrêté
+        <div className="mt-1 flex items-center gap-2">
+          <input
+            type="number"
+            name="current_page"
+            min={0}
+            max={userBook.book.page_count ?? undefined}
+            inputMode="numeric"
+            defaultValue={userBook.current_page ?? ""}
+            placeholder="ex. 142"
+            className="field w-32"
+          />
+          {userBook.book.page_count && <span className="text-muted">sur {userBook.book.page_count} pages</span>}
+        </div>
       </label>
 
       <label className="text-sm">

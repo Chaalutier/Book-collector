@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useState } from "react";
 import { useRouter } from "next/navigation";
+import PasswordInput from "@/app/components/PasswordInput";
 import { supabase } from "../../lib/supabase";
 
 export default function RegisterPage() {
@@ -68,16 +69,12 @@ export default function RegisterPage() {
                     <label htmlFor="password" className="block text-sm font-medium">
                         Mot de passe
                     </label>
-
-                    <input
+                    <PasswordInput
                         id="password"
-                        type="password"
-                        required
-                        minLength={6}
+                        required minLength={6}
                         autoComplete="new-password"
                         value={password}
-                        onChange={(event) => setPassword(event.target.value)}
-                        className="field mt-1"
+                        onChange={setPassword}
                     />
                 </div>
 

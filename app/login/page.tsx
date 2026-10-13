@@ -1,8 +1,9 @@
 "use client";
 
 import Link from "next/link";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
+import PasswordInput from "@/app/components/PasswordInput";
 import { supabase } from "../../lib/supabase";
 
 export default function LoginPage() {
@@ -12,6 +13,11 @@ export default function LoginPage() {
     const [pending, setPending] = useState(false);
 
     const router = useRouter();
+
+    // Sur la page de connexion, on efface la copie hors ligne de la wishlist (appareil partagé, changement de compte)
+    useEffect(() => {
+        if ("caches" in window) caches.delete("bouck-pages-v1").catch(() => {});
+    }, []);
 
     const handleSubmit = async (event: React.FormEvent<HTMLFormElement>) => {
         event.preventDefault();
@@ -61,15 +67,12 @@ export default function LoginPage() {
                     <label htmlFor="password" className="block text-sm font-medium">
                         Mot de passe
                     </label>
-
-                    <input
+                    <PasswordInput
                         id="password"
-                        type="password"
                         required
                         autoComplete="current-password"
                         value={password}
-                        onChange={(event) => setPassword(event.target.value)}
-                        className="field mt-1"
+                        onChange={setPassword}
                     />
                 </div>
 

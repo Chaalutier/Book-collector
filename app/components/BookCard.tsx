@@ -3,6 +3,7 @@ import { CATEGORY_LABELS, formatContributors, formatVolume } from "@/lib/labels"
 import type { UserBook } from "@/types/book";
 import BookCover from "./BookCover";
 import StatusSelect from "./StatusSelect";
+import { isProvisional } from "@/lib/sync-shared";
 
 export default function BookCard({ userBook }: { userBook: UserBook }) {
   const { book } = userBook;
@@ -11,7 +12,7 @@ export default function BookCard({ userBook }: { userBook: UserBook }) {
   return (
     <article className="group flex flex-col gap-2">
       <Link href={`/library/${userBook.id}`} className="block transition group-hover:-translate-y-0.5">
-        <BookCover src={book.cover_url} title={book.title} />
+        <BookCover src={book.cover_url} title={book.title} isbn={book.isbn13 ?? book.isbn10} />
       </Link>
 
       <div className="min-w-0 flex-1">
@@ -27,6 +28,14 @@ export default function BookCard({ userBook }: { userBook: UserBook }) {
         <p className="truncate text-xs text-muted">
           {formatContributors(book.contributors)} · {CATEGORY_LABELS[book.category]}
         </p>
+        {isProvisional(book) && (
+          <Link
+            href={`/library/${userBook.id}#completer`}
+            className="mt-1 inline-block rounded bg-amber-500/15 px-1.5 py-0.5 text-[11px] font-medium text-[#76561a]"
+          >
+            À compléter
+          </Link>
+        )}
       </div>
 
       <StatusSelect userBookId={userBook.id} status={userBook.status} />

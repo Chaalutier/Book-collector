@@ -9,6 +9,7 @@ export const CATEGORY_LABELS: Record<BookCategory, string> = {
 
 export const STATUS_LABELS: Record<ReadingStatus, string> = {
   wishlist: "Wishlist",
+  ordered: "À recevoir",
   to_read: "À lire",
   reading: "En cours",
   read: "Lu",
@@ -18,6 +19,7 @@ export const STATUS_LABELS: Record<ReadingStatus, string> = {
 /** Libellé long, utilisé dans les menus déroulants */
 export const STATUS_DESCRIPTIONS: Record<ReadingStatus, string> = {
   wishlist: "Wishlist (pas encore acheté)",
+  ordered: "Acheté, à recevoir",
   to_read: "Acheté, à lire",
   reading: "En cours de lecture",
   read: "Lu",
@@ -26,6 +28,7 @@ export const STATUS_DESCRIPTIONS: Record<ReadingStatus, string> = {
 
 export const STATUS_STYLES: Record<ReadingStatus, string> = {
   wishlist: "bg-[#f6e4e4] text-[#8a4848]",
+  ordered: "bg-[#e3ecf5] text-[#35566f]",
   to_read: "bg-soft text-accent-strong",
   reading: "bg-[#f5ecd7] text-[#76561a]",
   read: "bg-line text-[#2f4f42]",

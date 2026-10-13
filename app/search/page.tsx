@@ -11,6 +11,14 @@ type OwnedRow = {
   book: { isbn13: string | null; isbn10: string | null; google_books_id: string | null } | null;
 };
 
+function manualHref(title: string, wishlist: boolean) {
+  const params = new URLSearchParams();
+  if (title) params.set("title", title);
+  if (wishlist) params.set("to", "wishlist");
+  const qs = params.toString();
+  return qs ? `/search/manual?${qs}` : "/search/manual";
+}
+
 export default async function SearchPage({
   searchParams,
 }: {
@@ -66,7 +74,20 @@ export default async function SearchPage({
         </p>
       )}
 
-      <form action="/search" className="mt-6 flex gap-2">
+      <Link
+        href={wishlistMode ? "/scan?status=wishlist" : "/scan"}
+        className="btn-ghost mt-5 w-full justify-center sm:w-auto"
+      >
+        📷 Scanner un code-barres
+      </Link>
+
+      {!query && (
+        <Link href={manualHref("", wishlistMode)} className="btn-ghost ml-0 mt-2 w-full justify-center sm:ml-2 sm:w-auto">
+          ✎ Ajouter à la main
+        </Link>
+      )}
+
+      <form action="/search" className="mt-4 flex gap-2">
         {wishlistMode && <input type="hidden" name="to" value="wishlist" />}
         <input
           type="search"
@@ -89,6 +110,15 @@ export default async function SearchPage({
 
       {query && results.length === 0 && (
         <p className="mt-10 text-center text-muted">Aucun résultat pour « {query} ».</p>
+      )}
+
+      {query && (
+        <p className="mt-6 text-center text-sm text-muted">
+          Introuvable, ou pas encore sorti ?{" "}
+          <Link href={manualHref(query, wishlistMode)} className="font-medium text-accent-strong underline">
+            Ajouter à la main
+          </Link>
+        </p>
       )}
 
       <ul className="mt-8 divide-y divide-line">

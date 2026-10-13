@@ -1,6 +1,7 @@
 import type { BookCandidate, Contributor, ContributorRole } from "@/types/book";
 import { guessCategoryFromSignals, type CategorySignals } from "./category";
-import { cleanIsbn, isbn10to13, normalizeDate, parseSeriesFromTitle } from "./utils";
+import { fetchWithRetry } from "./http";
+import { cleanIsbn, cleanSeries, isbn10to13, normalizeDate, parseSeriesFromTitle } from "./utils";
 
 /**
  * API SRU de la Bibliothèque nationale de France — gratuite, sans clé.
@@ -110,6 +111,13 @@ function contributorsFromRecord(r: MarcRecord): Contributor[] {
 }
 
 function seriesFromRecord(r: MarcRecord): { title: string; volume: number | null } | null {
+  const found = rawSeriesFromRecord(r);
+  if (!found) return null;
+  const cleaned = cleanSeries({ series: found.title, volume: found.volume });
+  return cleaned.series ? { title: cleaned.series, volume: cleaned.volume } : null;
+}
+
+function rawSeriesFromRecord(r: MarcRecord): { title: string; volume: number | null } | null {
   // 461 = lien vers la notice de la série (le plus fiable)
   const link = fields(r, "461").find((f) => f.subfields.t?.length);
   if (link) {
@@ -224,7 +232,20 @@ export function bnfRecordToCandidate(r: MarcRecord): BookCandidate | null {
   };
 }
 
-async function querySru(cql: string, maximumRecords: number): Promise<BookCandidate[]> {
+/**
+ * Écarte les notices qui ne sont pas des livres de bibliothèque perso :
+ * thèses, mémoires, documents anciens ou sans ISBN (vendus en librairie = ont un ISBN).
+ */
+function isUsableBook(r: MarcRecord, c: BookCandidate): boolean {
+  if (!c.isbn13 && !c.isbn10) return false;
+  if (fields(r, "328").length > 0) return false; // 328 = note de thèse
+  if (/\b(th[eè]se|m[ée]moire de|dissertation|dactylographi)/i.test(c.title)) return false;
+  const year = Number(c.published_date?.slice(0, 4));
+  if (Number.isFinite(year) && year < 1950) return false;
+  return true;
+}
+
+async function querySru(cql: string, maximumRecords: number, { clean = true } = {}): Promise<BookCandidate[]> {
   const params = new URLSearchParams({
     version: "1.2",
     operation: "searchRetrieve",
@@ -233,25 +254,25 @@ async function querySru(cql: string, maximumRecords: number): Promise<BookCandid
     maximumRecords: String(maximumRecords),
   });
 
-  const response = await fetch(`${BNF_SRU_URL}?${params}`, {
-    signal: AbortSignal.timeout(8000),
-  });
-  if (!response.ok) throw new Error(`BnF a répondu ${response.status}`);
-
+  const response = await fetchWithRetry(`${BNF_SRU_URL}?${params}`, { revalidate: 24 * 3600, label: "BnF" });
   const xml = await response.text();
-  return parseRecords(xml)
-    .map(bnfRecordToCandidate)
-    .filter((c): c is BookCandidate => c !== null);
+
+  const result: BookCandidate[] = [];
+  for (const record of parseRecords(xml)) {
+    const candidate = bnfRecordToCandidate(record);
+    if (candidate && (!clean || isUsableBook(record, candidate))) result.push(candidate);
+  }
+  return result;
 }
 
 /** Notice BnF d'une édition précise */
 export async function findBnfByIsbn(isbn: string): Promise<BookCandidate | null> {
-  const results = await querySru(`bib.isbn adj "${isbn}"`, 1);
+  const results = await querySru(`bib.isbn adj "${isbn}"`, 1, { clean: false });
   return results[0] ?? null;
 }
 
 /** Recherche plein texte (titre, auteur...) parmi les livres imprimés */
-export async function searchBnf(query: string, maximumRecords = 15): Promise<BookCandidate[]> {
+export async function searchBnf(query: string, maximumRecords = 30): Promise<BookCandidate[]> {
   const safe = query.replace(/"/g, " ").trim();
   if (!safe) return [];
   return querySru(`bib.anywhere all "${safe}" and bib.doctype any "a"`, maximumRecords);

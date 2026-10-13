@@ -2,8 +2,11 @@ import { matchExistingSeries, normalizeTitle } from "@/lib/catalog/utils";
 import { sameAuthor } from "@/lib/catalog";
 import { searchGoogleBooks } from "@/lib/catalog/google-books";
 import type { BookCandidate, UserBook } from "@/types/book";
+import { isUpcoming } from "./calendar-shared";
 
-export type CalendarReason = { kind: "series" | "wishlist" | "author"; label: string };
+export { isUpcoming };
+
+export type CalendarReason = { kind: "series" | "wishlist" | "owned" | "author"; label: string };
 
 export type CalendarEntry = {
   key: string;
@@ -26,18 +29,6 @@ const CACHE_SECONDS = 6 * 3600;
 const MAX_SERIES = 12;
 const MAX_AUTHORS = 10;
 const CONCURRENCY = 5;
-
-/** La date est-elle à venir ? (et pas absurdement lointaine) */
-export function isUpcoming(date: string | null | undefined, now = new Date()): boolean {
-  if (!date) return false;
-  const today = now.toISOString().slice(0, 10);
-  const year = now.getUTCFullYear();
-  if (Number(date.slice(0, 4)) > year + 2) return false;
-  if (date.length >= 10) return date >= today;
-  if (date.length === 7) return date >= today.slice(0, 7);
-  // Année seule : trop vague pour l'année en cours (souvent une date de parution passée)
-  return Number(date) > year;
-}
 
 async function inPool<T>(items: T[], worker: (item: T) => Promise<void>) {
   let i = 0;
@@ -67,14 +58,20 @@ export async function getCalendar(userBooks: UserBook[], owned: Map<string, numb
     entries.set(key, { key, date: c.published_date, reasons: [reason], userBook: null, candidate: c });
   };
 
-  // 1. Wishlist : les dates sont déjà en base
-  const wishlist = userBooks.filter((ub) => ub.status === "wishlist" && isUpcoming(ub.book.published_date));
+  // 1. Livres déjà dans la bibliothèque (wishlist, commandés, achetés) avec une date à venir : dates déjà en base
+  const wishlist = userBooks.filter(
+    (ub) => ub.status !== "abandoned" && ub.status !== "read" && isUpcoming(ub.book.published_date)
+  );
   for (const ub of wishlist) {
     const key = `ub:${ub.id}`;
     entries.set(key, {
       key,
       date: ub.book.published_date!,
-      reasons: [{ kind: "wishlist", label: "Dans ta wishlist" }],
+      reasons: [
+        ub.status === "wishlist"
+          ? { kind: "wishlist", label: "Dans ta wishlist" }
+          : { kind: "owned", label: ub.status === "ordered" ? "Commandé" : "Acheté" },
+      ],
       userBook: ub,
       candidate: null,
     });

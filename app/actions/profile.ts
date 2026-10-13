@@ -48,5 +48,23 @@ export async function signOut() {
   const supabase = await createClient();
   await supabase.auth.signOut();
   revalidatePath("/", "layout");
-  redirect("/");
+  redirect("/login");
+}
+
+/** Mémorise la vue du calendrier (liste ou grille) choisie par l'utilisateur */
+export async function setCalendarView(view: "list" | "grid"): Promise<ActionResult> {
+  if (view !== "list" && view !== "grid") return { ok: false, error: "Vue invalide." };
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) return { ok: false, error: "Non connecté." };
+
+  const { error } = await supabase.from("profiles").update({ calendar_view: view }).eq("id", user.id);
+  if (error) {
+    // Colonne absente (migration pas encore exécutée) : la vue reste valable pour cette visite
+    console.error("setCalendarView :", error);
+    return { ok: false, error: "Préférence non enregistrée." };
+  }
+  return { ok: true };
 }

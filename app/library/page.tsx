@@ -1,8 +1,11 @@
+import { Suspense } from "react";
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { getCurrentUser, getUserLibrary } from "@/lib/library";
 import { createClient } from "@/lib/server";
 import LibraryStats from "@/app/components/LibraryStats";
+import { isProvisional } from "@/lib/sync-shared";
+import AddBookButton from "./AddBookButton";
 import LibraryView from "./LibraryView";
 
 export default async function LibraryPage({
@@ -35,10 +38,26 @@ export default async function LibraryPage({
           <h1 className="text-3xl font-bold">Ma bibliothèque</h1>
           <p className="mt-1 text-sm text-muted">{userBooks.length} livre(s)</p>
         </div>
-        <Link href="/search" className="btn-primary">
-          + Ajouter un livre
-        </Link>
+        <Suspense
+          fallback={
+            <Link href="/search" className="btn-primary">
+              + Ajouter un livre
+            </Link>
+          }
+        >
+          <AddBookButton />
+        </Suspense>
       </div>
+
+      {userBooks.some((ub) => isProvisional(ub.book)) && (
+        <Link
+          href="/sync"
+          className="mt-5 block rounded-lg bg-amber-500/10 px-3 py-2 text-sm hover:bg-amber-500/15"
+        >
+          {userBooks.filter((ub) => isProvisional(ub.book)).length} fiche(s) provisoire(s) à compléter →{" "}
+          <span className="underline">Vérifier si elles sont référencées</span>
+        </Link>
+      )}
 
       {userBooks.length === 0 ? (
         <div className="mt-12 rounded-xl border border-dashed border-line p-10 text-center">

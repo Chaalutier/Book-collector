@@ -18,9 +18,9 @@ const TABS = [
     icon: icon(<><path d="M4 5a2 2 0 0 1 2-2h12v16H6a2 2 0 0 0-2 2z" /><path d="M4 19V5" /><path d="M9 7h6" /></>),
   },
   {
-    href: "/library?status=wishlist",
+    href: "/wishlist",
     label: "Wishlist",
-    match: () => false,
+    match: (p: string) => p.startsWith("/wishlist"),
     badge: true,
     icon: icon(<path d="M12 20s-7-4.4-7-10a4 4 0 0 1 7-2.5A4 4 0 0 1 19 10c0 5.6-7 10-7 10z" />),
   },

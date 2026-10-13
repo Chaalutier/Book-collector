@@ -3,6 +3,7 @@ export type BookCategory = (typeof BOOK_CATEGORIES)[number];
 
 export const READING_STATUSES = [
   "wishlist",
+  "ordered",
   "to_read",
   "reading",
   "read",
@@ -62,7 +63,10 @@ export type Book = {
 export type UserBook = {
   id: number;
   status: ReadingStatus;
+  /** 0,5 à 5 par pas de 0,5 */
   rating: number | null;
+  /** Page où la lecture s'est arrêtée */
+  current_page: number | null;
   notes: string | null;
   started_at: string | null;
   finished_at: string | null;
@@ -76,7 +80,7 @@ export type UserBook = {
  * C'est aussi le format envoyé à la fonction SQL `add_book_to_library`.
  */
 export type BookCandidate = {
-  source: "google" | "bnf";
+  source: "google" | "bnf" | "openlibrary";
   /** Pourquoi cette catégorie a été choisie (affiché avant l'ajout) */
   category_reasons?: string[];
   /** Indices bruts servant à la détection (non enregistrés en base) */
