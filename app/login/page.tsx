@@ -17,6 +17,10 @@ export default function LoginPage() {
     // Sur la page de connexion, on efface la copie hors ligne de la wishlist (appareil partagé, changement de compte)
     useEffect(() => {
         if ("caches" in window) caches.delete("bouck-pages-v1").catch(() => {});
+        // Retour d'un lien de confirmation qui n'a pas fonctionné
+        if (new URLSearchParams(window.location.search).get("confirm") === "error") {
+            setError("Le lien de confirmation a expiré ou a déjà été utilisé. Si ton adresse est confirmée, connecte-toi simplement.");
+        }
     }, []);
 
     const handleSubmit = async (event: React.FormEvent<HTMLFormElement>) => {

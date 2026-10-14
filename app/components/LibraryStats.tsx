@@ -7,7 +7,7 @@ const CATEGORY_COLORS = ["bg-[#6b9080]", "bg-[#a4c3b2]", "bg-[#d9b26f]", "bg-[#c
 /** Statistiques de la bibliothèque (page bibliothèque + profil) */
 export default function LibraryStats({ userBooks }: { userBooks: UserBook[] }) {
   const year = new Date().getFullYear();
-  const owned = userBooks.filter((ub) => ub.status !== "wishlist");
+  const owned = userBooks.filter((ub) => ub.status !== "wishlist" && ub.status !== "ordered");
   const read = userBooks.filter((ub) => ub.status === "read");
   const readThisYear = read.filter((ub) => ub.finished_at?.startsWith(String(year))).length;
   const pagesRead = read.reduce((sum, ub) => sum + (ub.book.page_count ?? 0), 0);

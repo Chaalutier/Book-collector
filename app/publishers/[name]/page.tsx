@@ -6,6 +6,7 @@ import ExternalWorks from "@/app/components/ExternalWorks";
 import WorksGrid from "@/app/components/WorksGrid";
 import { searchByPublisher } from "@/lib/catalog";
 import { getCurrentUser, getPublisherWorks } from "@/lib/library";
+import { getPublisherInfo } from "@/lib/publishers";
 import { createClient } from "@/lib/server";
 
 function safeDecode(value: string) {
@@ -27,6 +28,7 @@ export default async function PublisherPage({ params }: { params: Promise<{ name
   const { works } = await getPublisherWorks(supabase, user.id, name);
   // Un éditeur inconnu du catalogue reste consultable (on cherche ses livres en ligne)
   const displayName = works[0]?.book.publisher ?? name;
+  const info = await getPublisherInfo(supabase, displayName);
   const myWorks = works.filter((w) => w.mine);
   const mineCount = myWorks.length;
 
@@ -50,7 +52,29 @@ export default async function PublisherPage({ params }: { params: Promise<{ name
 
       <header className="mt-6">
         <p className="text-sm text-muted">Maison d&apos;édition</p>
-        <h1 className="text-3xl font-bold">{displayName}</h1>
+        <div className="flex flex-wrap items-center gap-3">
+          <h1 className="text-3xl font-bold">{displayName}</h1>
+          <Link
+            href={`/publishers/${encodeURIComponent(displayName)}/edit`}
+            className="rounded-full border border-line bg-white px-3 py-1 text-sm text-muted hover:border-accent hover:text-accent-strong"
+          >
+            ✎ Modifier
+          </Link>
+        </div>
+        {info && (info.country || info.parent_group || info.website) && (
+          <p className="mt-1 text-sm text-muted">
+            {[info.country, info.parent_group && `Groupe ${info.parent_group}`].filter(Boolean).join(" · ")}
+            {info.website && (
+              <>
+                {info.country || info.parent_group ? " · " : ""}
+                <a href={info.website} target="_blank" rel="noopener noreferrer" className="underline hover:text-foreground">
+                  Site web
+                </a>
+              </>
+            )}
+          </p>
+        )}
+        {info?.description && <p className="mt-2 max-w-prose whitespace-pre-line text-sm">{info.description}</p>}
         <p className="mt-1 text-sm text-muted">
           {works.length} livre{works.length > 1 ? "s" : ""} au catalogue · {mineCount} dans ma bibliothèque
         </p>

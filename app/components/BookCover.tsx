@@ -21,7 +21,10 @@ export default function BookCover({
   const sources = [src, isbn ? `https://covers.openlibrary.org/b/isbn/${isbn}-M.jpg?default=false` : null].filter(
     (s, i, all): s is string => !!s && all.indexOf(s) === i
   );
-  const [attempt, setAttempt] = useState(0);
+  // Les échecs sont mémorisés pour CETTE image principale : si `src` change
+  // (nouvelle couverture envoyée), on repart de zéro sans rechargement.
+  const [failed, setFailed] = useState<{ src: string | null; count: number }>({ src, count: 0 });
+  const attempt = failed.src === src ? failed.count : 0;
   const current = sources[attempt];
 
   if (!current) {
@@ -42,7 +45,7 @@ export default function BookCover({
       src={current}
       alt={`Couverture de ${title}`}
       loading="lazy"
-      onError={() => setAttempt((n) => n + 1)}
+      onError={() => setFailed({ src, count: attempt + 1 })}
       className={`aspect-[2/3] w-full rounded-md bg-line object-cover shadow-sm ${className}`}
     />
   );

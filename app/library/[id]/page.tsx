@@ -26,11 +26,13 @@ export default async function UserBookPage({ params }: { params: Promise<{ id: s
   const { book } = userBook;
   const volume = formatVolume(book.volume_number);
   const provisional = isProvisional(book);
+  // Wishlist et commandes en cours vivent dans /wishlist : on y revient
+  const fromWishlist = userBook.status === "wishlist" || userBook.status === "ordered";
 
   return (
     <main className="mx-auto w-full max-w-5xl px-4 py-8">
-      <Link href="/library" className="text-sm text-muted hover:text-foreground">
-        ← Ma bibliothèque
+      <Link href={fromWishlist ? "/wishlist" : "/library"} className="text-sm text-muted hover:text-foreground">
+        ← {fromWishlist ? "Wishlist" : "Ma bibliothèque"}
       </Link>
 
       <div className="mt-6 grid gap-8 md:grid-cols-[180px_1fr]">

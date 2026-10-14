@@ -22,7 +22,7 @@ export default async function SeriesPage({ params }: { params: Promise<{ id: str
   if (!result) notFound();
 
   const { series, books } = result;
-  const owned = books.filter((b) => b.status !== "wishlist");
+  const owned = books.filter((b) => b.status !== "wishlist" && b.status !== "ordered");
   const read = books.filter((b) => b.status === "read").length;
   const missing = missingVolumes(
     books.map((b) => b.book.volume_number),

@@ -68,3 +68,23 @@ export async function setCalendarView(view: "list" | "grid"): Promise<ActionResu
   }
   return { ok: true };
 }
+
+/** Enregistre tout de suite la photo de profil (ou la retire avec null) */
+export async function setAvatar(url: string | null): Promise<ActionResult> {
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) return { ok: false, error: "Non connecté." };
+
+  const allowedPrefix = `${process.env.NEXT_PUBLIC_SUPABASE_URL}/storage/v1/object/public/avatars/${user.id}/`;
+  if (url !== null && !url.startsWith(allowedPrefix)) return { ok: false, error: "Photo invalide." };
+
+  const { error } = await supabase.from("profiles").upsert({ id: user.id, avatar_url: url });
+  if (error) {
+    console.error("setAvatar :", error);
+    return { ok: false, error: "Enregistrement impossible." };
+  }
+  revalidatePath("/", "layout");
+  return { ok: true, message: url ? "Photo enregistrée." : "Photo retirée." };
+}

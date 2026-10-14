@@ -23,9 +23,11 @@ const STATUS_TABS: { value: StatusFilter; label: string }[] = [
   ...READING_STATUSES.map((s) => ({ value: s as StatusFilter, label: STATUS_LABELS[s] })),
 ];
 
+/** Pas encore sur l'étagère : masqués de la vue « Tous » et de « Possédés » */
+const NOT_ON_SHELF: ReadingStatus[] = ["wishlist", "ordered"];
+
 function matchesStatus(ub: UserBook, filter: StatusFilter) {
-  if (filter === "all") return true;
-  if (filter === "owned") return ub.status !== "wishlist";
+  if (filter === "all" || filter === "owned") return !NOT_ON_SHELF.includes(ub.status);
   return ub.status === filter;
 }
 
@@ -214,7 +216,7 @@ function SeriesCard({ books }: { books: UserBook[] }) {
   const series = books[0].book.series!;
   const cover = books.find((b) => b.book.cover_url)?.book.cover_url ?? null;
   const read = books.filter((b) => b.status === "read").length;
-  const owned = books.filter((b) => b.status !== "wishlist").length;
+  const owned = books.filter((b) => !NOT_ON_SHELF.includes(b.status)).length;
   const volumes = books.map((b) => b.book.volume_number).filter((v): v is number => v !== null);
   const last = volumes.length ? Math.max(...volumes) : null;
   const total = series.total_volumes ?? last;

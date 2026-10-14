@@ -522,6 +522,12 @@ export async function addManualBook(_prev: ActionResult | null, formData: FormDa
     .map((n) => n.trim())
     .filter(Boolean);
 
+  // Couverture envoyée depuis le formulaire : seulement notre propre stockage
+  const rawCover = str(formData.get("cover_url"), 1000);
+  const base = process.env.NEXT_PUBLIC_SUPABASE_URL;
+  const coverUrl =
+    rawCover && base && rawCover.startsWith(`${base}/storage/v1/object/public/covers/${user.id}/`) ? rawCover : null;
+
   const candidate: BookCandidate = {
     source: "google",
     google_books_id: null,
@@ -534,7 +540,7 @@ export async function addManualBook(_prev: ActionResult | null, formData: FormDa
     volume_number: num(formData.get("volume_number")),
     isbn10: isbn && isbn.length === 10 ? isbn : null,
     isbn13: isbn ? (isbn.length === 13 ? isbn : isbn10to13(isbn)) : null,
-    cover_url: null,
+    cover_url: coverUrl,
     publisher: str(formData.get("publisher"), 200),
     published_date: publishedDate,
     page_count: null,

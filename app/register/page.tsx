@@ -24,6 +24,8 @@ export default function RegisterPage() {
         const { data, error } = await supabase.auth.signUp({
             email,
             password,
+            // Le lien du mail ramène sur le site où l'inscription a eu lieu (et non sur localhost)
+            options: { emailRedirectTo: `${window.location.origin}/auth/callback?next=/profile` },
         });
 
         setPending(false);
