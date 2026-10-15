@@ -12,7 +12,7 @@ const OPTIONS: { value: View; label: string }[] = [
 ];
 
 /** Bascule liste / calendrier ; le choix est enregistré dans le profil de l'utilisateur */
-export default function ViewSwitch({ view }: { view: View }) {
+export default function ViewSwitch({ view, source = "mine" }: { view: View; source?: "mine" | "bd" }) {
   const router = useRouter();
   const [current, setCurrent] = useState<View>(view);
   const [, startTransition] = useTransition();
@@ -22,7 +22,11 @@ export default function ViewSwitch({ view }: { view: View }) {
     setCurrent(next);
     startTransition(async () => {
       await setCalendarView(next);
-      router.replace(next === "grid" ? "/calendar?view=grid" : "/calendar?view=list");
+      // Garde l'onglet (et le filtre) en cours
+      const params = new URLSearchParams(window.location.search);
+      params.set("view", next);
+      if (source === "bd") params.set("source", "bd");
+      router.replace(`/calendar?${params.toString()}`);
     });
   };
 

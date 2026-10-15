@@ -21,7 +21,16 @@ function coverOf(entry: CalendarEntry) {
 }
 
 /** Calendrier classique : un seul mois à l'écran, flèches pour changer de mois, clic sur un jour pour le détail ou l'ajout */
-export default function MonthGrid({ entries, today: todayProp }: { entries: CalendarEntry[]; today: string }) {
+export default function MonthGrid({
+  entries,
+  today: todayProp,
+  allowAdd = true,
+}: {
+  entries: CalendarEntry[];
+  today: string;
+  /** Liens « + Ajouter une sortie » (masqués sur l'onglet Sorties BD) */
+  allowAdd?: boolean;
+}) {
   // Date du jour fournie par le serveur ; repli sur l'horloge si le format est inattendu
   const today = /^\d{4}-\d{2}-\d{2}$/.test(todayProp ?? "") ? todayProp : new Date().toISOString().slice(0, 10);
   const [year, setYear] = useState(Number(today.slice(0, 4)));
@@ -178,12 +187,14 @@ export default function MonthGrid({ entries, today: todayProp }: { entries: Cale
                 timeZone: "UTC",
               })}
             </p>
-            <Link
-              href={addHref(`${pad(selected)}/${pad(month)}/${year}`)}
-              className="btn-primary px-3 py-1 text-sm"
-            >
-              + Ajouter une sortie
-            </Link>
+            {allowAdd && (
+              <Link
+                href={addHref(`${pad(selected)}/${pad(month)}/${year}`)}
+                className="btn-primary px-3 py-1 text-sm"
+              >
+                + Ajouter une sortie
+              </Link>
+            )}
           </div>
           {selectedEntries.length > 0 ? (
             <ul className="mt-3 divide-y divide-line">
@@ -225,11 +236,13 @@ export default function MonthGrid({ entries, today: todayProp }: { entries: Cale
         </div>
       )}
 
-      <p className="mt-6 text-center">
-        <Link href={addHref(`${pad(month)}/${year}`)} className="text-sm text-accent-strong underline">
-          + Ajouter une sortie sans jour précis ({MONTHS[month - 1].toLowerCase()} {year})
-        </Link>
-      </p>
+      {allowAdd && (
+        <p className="mt-6 text-center">
+          <Link href={addHref(`${pad(month)}/${year}`)} className="text-sm text-accent-strong underline">
+            + Ajouter une sortie sans jour précis ({MONTHS[month - 1].toLowerCase()} {year})
+          </Link>
+        </p>
+      )}
     </div>
   );
 }

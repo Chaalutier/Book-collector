@@ -20,6 +20,10 @@ NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY=sb_publishable_xxx
 
 # Optionnel mais recommandé : sans clé, Google Books limite vite (erreurs 429)
 GOOGLE_BOOKS_API_KEY=AIza...
+
+# Sorties BD (bede.fr) : mise à jour automatique, serveur uniquement
+SUPABASE_SECRET_KEY=sb_secret_xxx   # Supabase > Project Settings > API Keys > Secret keys
+CRON_SECRET=une-longue-chaine-aleatoire
 ```
 
 Clé Google Books gratuite (1 000 requêtes/jour) :
@@ -73,3 +77,18 @@ lib/
 supabase/migrations SQL à exécuter dans Supabase
 types/book.ts       types partagés
 ```
+
+## Sorties BD (bede.fr)
+
+Onglet **Sorties BD** du calendrier (`/calendar?source=bd`) : toutes les BD à paraître relevées sur
+[bede.fr](https://www.bede.fr/bd) (avec l'accord du site), croisées avec ta bibliothèque
+(« Suite de … », « Dans ta wishlist », filtre « Mes séries »).
+
+- Table `bd_releases` : `supabase/migrations/20261021000000_sorties_bd.sql`
+- Mise à jour : `GET /api/cron/sorties-bd`, appelée par **Vercel Cron** les 1er et 15 du mois à 4 h UTC
+  (`vercel.json`). Protégée par `CRON_SECRET` (Vercel envoie l'en-tête `Authorization: Bearer …`).
+- Lancer une mise à jour à la main :
+  `curl -H "Authorization: Bearer $CRON_SECRET" https://<ton-site>/api/cron/sorties-bd`
+- Garde-fou : si moins de 20 sorties sont trouvées (page modifiée), rien n'est écrit ni supprimé.
+- Code : `lib/bede/parse.ts` (lecture de la page), `lib/bede/sync.ts` (écriture),
+  `lib/bede/releases.ts` (affichage). Export .ics ponctuel : `node scripts/scrape-bede.mjs`.
