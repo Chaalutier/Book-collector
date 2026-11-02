@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
 import { removeFromLibrary } from "@/app/actions/library";
+import BackLink from "@/app/components/BackLink";
 import BookCover from "@/app/components/BookCover";
 import { CATEGORY_LABELS, ROLE_LABELS, formatDate, formatVolume } from "@/lib/labels";
 import { getCurrentUser, getUserBook } from "@/lib/library";
@@ -31,9 +32,7 @@ export default async function UserBookPage({ params }: { params: Promise<{ id: s
 
   return (
     <main className="mx-auto w-full max-w-5xl px-4 py-8">
-      <Link href={fromWishlist ? "/wishlist" : "/library"} className="text-sm text-muted hover:text-foreground">
-        ← {fromWishlist ? "Wishlist" : "Ma bibliothèque"}
-      </Link>
+      <BackLink href={fromWishlist ? "/wishlist" : "/library"} className="text-sm text-muted hover:text-foreground" />
 
       <div className="mt-6 grid gap-8 md:grid-cols-[180px_1fr]">
         <div className="mx-auto w-40 md:w-full">
@@ -121,7 +120,7 @@ export default async function UserBookPage({ params }: { params: Promise<{ id: s
           </details>
 
           <details className="mt-4 rounded-xl border border-line bg-card p-5">
-            <summary className="cursor-pointer font-semibold">Corriger la fiche (titre, catégorie, série, tome)</summary>
+            <summary className="cursor-pointer font-semibold">Corriger la fiche (titre, éditeur, date de sortie, série…)</summary>
             <BookInfoForm book={book} />
           </details>
 

@@ -258,8 +258,14 @@ export async function updateBookInfo(
   const category = formData.get("category");
   const seriesTitle = str(formData.get("series_title"), 200);
   const volume = num(formData.get("volume_number"));
+  const publisher = str(formData.get("publisher"), 200);
+  // Dates partielles acceptées, comme celles des catalogues : "2013", "2013-05", "2013-05-02"
+  const publishedDate = str(formData.get("published_date"), 10);
   if (!isCategory(category)) return { ok: false, error: "Catégorie invalide." };
   if (!title) return { ok: false, error: "Le titre est obligatoire." };
+  if (publishedDate && !/^\d{4}(-(0[1-9]|1[0-2])(-(0[1-9]|[12]\d|3[01]))?)?$/.test(publishedDate)) {
+    return { ok: false, error: "Date de sortie invalide (AAAA, AAAA-MM ou AAAA-MM-JJ)." };
+  }
 
   // L'utilisateur doit avoir ce livre dans sa bibliothèque
   const { data: owned } = await supabase
@@ -297,7 +303,14 @@ export async function updateBookInfo(
 
   const { error } = await supabase
     .from("books")
-    .update({ title, category, series_id: seriesId, volume_number: seriesId ? volume : null })
+    .update({
+      title,
+      category,
+      publisher,
+      published_date: publishedDate,
+      series_id: seriesId,
+      volume_number: seriesId ? volume : null,
+    })
     .eq("id", bookId);
 
   if (error) {
@@ -306,6 +319,8 @@ export async function updateBookInfo(
   }
 
   revalidatePath("/library", "layout");
+  revalidatePath("/wishlist");
+  revalidatePath("/calendar");
   return { ok: true, message: "Fiche mise à jour." };
 }
 

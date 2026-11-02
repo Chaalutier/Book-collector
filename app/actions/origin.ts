@@ -69,3 +69,28 @@ export async function detectOrigins(authorIds: number[]): Promise<ActionResult<{
   revalidatePath("/wishlist");
   return { ok: true, data: { found, missed } };
 }
+
+/** Renomme un auteur (catalogue partagé : le nom change sur tous ses livres) */
+export async function renameAuthor(_prev: ActionResult | null, formData: FormData): Promise<ActionResult> {
+  const { supabase, user } = await requireUser();
+  if (!user) return { ok: false, error: "Non connecté." };
+
+  const authorId = Number(formData.get("author_id"));
+  const raw = formData.get("name");
+  const name = typeof raw === "string" ? raw.trim().replace(/\s+/g, " ").slice(0, 200) : "";
+  if (!Number.isInteger(authorId)) return { ok: false, error: "Auteur introuvable." };
+  if (!name) return { ok: false, error: "Le nom est obligatoire." };
+
+  const { error } = await supabase.from("authors").update({ name }).eq("id", authorId);
+  if (error) {
+    console.error("renameAuthor :", error);
+    return {
+      ok: false,
+      error: error.code === "23505" ? "Un autre auteur porte déjà ce nom." : "Enregistrement impossible.",
+    };
+  }
+  revalidatePath("/library", "layout");
+  revalidatePath("/wishlist");
+  revalidatePath(`/authors/${authorId}`);
+  return { ok: true, message: "Nom enregistré." };
+}

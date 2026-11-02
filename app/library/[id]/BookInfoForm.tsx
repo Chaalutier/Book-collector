@@ -83,6 +83,23 @@ export default function BookInfoForm({ book }: { book: Book }) {
         />
       </label>
 
+      <label className="text-sm sm:col-span-2">
+        Éditeur
+        <input name="publisher" defaultValue={book.publisher ?? ""} maxLength={200} className="field mt-1" />
+      </label>
+
+      <label className="text-sm">
+        Date de sortie
+        <input
+          name="published_date"
+          defaultValue={book.published_date ?? ""}
+          pattern="\d{4}(-\d{2}(-\d{2})?)?"
+          title="AAAA, AAAA-MM ou AAAA-MM-JJ"
+          placeholder="AAAA-MM-JJ"
+          className="field mt-1"
+        />
+      </label>
+
       <div className="flex items-center gap-3 sm:col-span-3">
         <button type="submit" disabled={pending} className="btn-ghost">
           {pending ? "Enregistrement…" : "Mettre à jour la fiche"}

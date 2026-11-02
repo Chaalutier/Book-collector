@@ -8,6 +8,7 @@ import { searchByAuthor } from "@/lib/catalog";
 import { ROLE_LABELS } from "@/lib/labels";
 import { getAuthorWorks, getCurrentUser } from "@/lib/library";
 import { createClient } from "@/lib/server";
+import NameForm from "./NameForm";
 import OriginForm from "./OriginForm";
 
 export default async function AuthorPage({ params }: { params: Promise<{ id: string }> }) {
@@ -43,6 +44,7 @@ export default async function AuthorPage({ params }: { params: Promise<{ id: str
           {roles.map((r) => ROLE_LABELS[r]).join(", ")} · {works.length} livre{works.length > 1 ? "s" : ""} au catalogue
           · {mineCount} dans ma bibliothèque
         </p>
+        <NameForm authorId={author.id} name={author.name} />
         <OriginForm authorId={author.id} origin={origin} />
         {publishers.length > 0 && (
           <p className="mt-2 flex flex-wrap gap-2 text-sm">
