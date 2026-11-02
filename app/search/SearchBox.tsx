@@ -4,13 +4,13 @@ import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 import BookCover from "@/app/components/BookCover";
 import { formatContributors, formatDate } from "@/lib/labels";
-import type { BookCandidate } from "@/types/book";
+import type { Suggestion } from "@/lib/catalog";
 
 /** Champ de recherche avec aperçu des 5 premiers résultats pendant la frappe */
 export default function SearchBox({ query, wishlistMode }: { query: string; wishlistMode: boolean }) {
   const router = useRouter();
   const [value, setValue] = useState(query);
-  const [suggestions, setSuggestions] = useState<BookCandidate[]>([]);
+  const [suggestions, setSuggestions] = useState<Suggestion[]>([]);
   const [open, setOpen] = useState(false);
   const [active, setActive] = useState(-1);
   const typed = useRef(false);
@@ -23,7 +23,7 @@ export default function SearchBox({ query, wishlistMode }: { query: string; wish
     const timer = setTimeout(() => {
       fetch(`/api/suggest?q=${encodeURIComponent(q)}`, { signal: controller.signal })
         .then((r) => (r.ok ? r.json() : []))
-        .then((list: BookCandidate[]) => {
+        .then((list: Suggestion[]) => {
           setSuggestions(list);
           setActive(-1);
           setOpen(true);
@@ -37,7 +37,7 @@ export default function SearchBox({ query, wishlistMode }: { query: string; wish
   }, [value, query]);
 
   // Un aperçu mène à cette édition précise (par ISBN quand on l'a)
-  const choose = (c: BookCandidate) => {
+  const choose = (c: Suggestion) => {
     const params = new URLSearchParams({ q: c.isbn13 ?? c.isbn10 ?? c.title });
     if (wishlistMode) params.set("to", "wishlist");
     setOpen(false);
@@ -97,7 +97,7 @@ export default function SearchBox({ query, wishlistMode }: { query: string; wish
         >
           {suggestions.map((c, i) => (
             <li
-              key={c.bnf_ark ?? c.isbn13 ?? c.title}
+              key={c.isbn13 ?? c.isbn10 ?? c.title}
               id={`suggestion-${i}`}
               role="option"
               aria-selected={i === active}

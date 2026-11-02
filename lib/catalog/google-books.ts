@@ -120,7 +120,12 @@ export async function searchGoogleBooks(
     filter,
     lang,
     revalidate,
+    retries,
+    timeoutMs,
   }: {
+    /** Réessais et délai (autocomplétion : on préfère échouer vite) */
+    retries?: number;
+    timeoutMs?: number;
     /** Met la réponse en cache (secondes) — utile pour les pages qui font beaucoup d'appels */
     revalidate?: number;
     /** Langue des éditions ("fr" par défaut, null = toutes) */
@@ -152,6 +157,8 @@ export async function searchGoogleBooks(
     headers: { Accept: "application/json" },
     revalidate: revalidate ?? (isbn ? 7 * 24 * 3600 : 6 * 3600),
     label: "Google Books",
+    retries,
+    timeoutMs,
   });
 
   const data = (await response.json()) as GoogleSearchResponse;

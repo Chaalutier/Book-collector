@@ -19,7 +19,7 @@ function openLibraryCover(isbn: string | null): string | null {
 }
 
 /** Recherche texte : pas de livre sans auteur ni d'édition étrangère (langue inconnue gardée) */
-const isFrenchWithAuthor = (c: BookCandidate) =>
+const isFrenchWithAuthor = (c: Pick<BookCandidate, "contributors" | "language">) =>
   c.contributors.length > 0 && (!c.language || ["fr", "fre", "fra"].includes(c.language.toLowerCase()));
 
 /**
@@ -97,17 +97,53 @@ export async function searchCatalog(
   return { results: ranked.length > 0 || page > 0 ? ranked : results, warnings, hasMore };
 }
 
+export type Suggestion = Pick<
+  BookCandidate,
+  | "title"
+  | "subtitle"
+  | "series_title"
+  | "publisher"
+  | "published_date"
+  | "volume_number"
+  | "contributors"
+  | "cover_url"
+  | "isbn13"
+  | "isbn10"
+  | "language"
+>;
+
 /**
- * Autocomplétion : 5 livres, BnF seule (Google est trop souvent en quota pour chaque frappe).
+ * Autocomplétion : 5 livres. Sources, de la plus sûre à la moins sûre :
+ * - `local` : le catalogue de l'app (instantané, mots partiels compris) ;
+ * - Google Books, un seul essai rapide (souvent en quota) ;
+ * - la BnF, seulement à partir de 2 mots : elle ne trie pas par pertinence,
+ *   un mot seul (« harry ») lui fait renvoyer n'importe quoi.
  * Le dernier mot est cherché comme début de mot (« hunter x hun »).
  */
-export async function suggestCatalog(query: string): Promise<BookCandidate[]> {
+export async function suggestCatalog(query: string, local: Suggestion[] = []): Promise<Suggestion[]> {
   const q = query.trim();
   if (q.length < 3 || looksLikeIsbn(q)) return [];
-  const results = await searchBnf(`${q}*`, 20);
-  return rankSearchResults(results.filter(isFrenchWithAuthor), q)
-    .slice(0, 5)
-    .map((r) => ({ ...r, cover_url: openLibraryCover(r.isbn13) }));
+  const multiWord = q.split(/\s+/).length > 1;
+
+  const [google, bnf] = await Promise.allSettled([
+    searchGoogleBooks(q, { maxResults: 20, retries: 0, timeoutMs: 3000 }),
+    multiWord ? searchBnf(`${q}*`, 20) : Promise.resolve([]),
+  ]);
+  if (google.status === "rejected") console.error("Suggestions Google Books :", google.reason);
+  if (bnf.status === "rejected") console.error("Suggestions BnF :", bnf.reason);
+
+  const seen = new Set<string>();
+  const all = [
+    ...local,
+    ...(google.status === "fulfilled" ? google.value : []),
+    ...(bnf.status === "fulfilled" ? bnf.value.map((r) => ({ ...r, cover_url: openLibraryCover(r.isbn13) })) : []),
+  ].filter((r) => {
+    const key = r.isbn13 ?? r.isbn10 ?? normalizeTitle(r.title);
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
+  return rankSearchResults(all.filter(isFrenchWithAuthor), q).slice(0, 5);
 }
 
 function nameTokens(value: string): string[] {
