@@ -245,13 +245,18 @@ function isUsableBook(r: MarcRecord, c: BookCandidate): boolean {
   return true;
 }
 
-async function querySru(cql: string, maximumRecords: number, { clean = true } = {}): Promise<BookCandidate[]> {
+async function querySru(
+  cql: string,
+  maximumRecords: number,
+  { clean = true, startRecord = 1 } = {}
+): Promise<BookCandidate[]> {
   const params = new URLSearchParams({
     version: "1.2",
     operation: "searchRetrieve",
     query: cql,
     recordSchema: "unimarcxchange",
     maximumRecords: String(maximumRecords),
+    startRecord: String(startRecord),
   });
 
   const response = await fetchWithRetry(`${BNF_SRU_URL}?${params}`, { revalidate: 24 * 3600, label: "BnF" });
@@ -271,11 +276,11 @@ export async function findBnfByIsbn(isbn: string): Promise<BookCandidate | null>
   return results[0] ?? null;
 }
 
-/** Recherche plein texte (titre, auteur...) parmi les livres imprimés */
-export async function searchBnf(query: string, maximumRecords = 30): Promise<BookCandidate[]> {
+/** Recherche plein texte (titre, auteur...) parmi les livres imprimés ; « hun* » cherche les mots qui commencent par « hun » */
+export async function searchBnf(query: string, maximumRecords = 30, startRecord = 1): Promise<BookCandidate[]> {
   const safe = query.replace(/"/g, " ").trim();
   if (!safe) return [];
-  return querySru(`bib.anywhere all "${safe}" and bib.doctype any "a"`, maximumRecords);
+  return querySru(`bib.anywhere all "${safe}" and bib.doctype any "a"`, maximumRecords, { startRecord });
 }
 
 /** Livres imprimés d'un auteur (index auteur de la BnF) */

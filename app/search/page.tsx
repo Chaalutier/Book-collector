@@ -1,15 +1,10 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
-import { searchCatalog } from "@/lib/catalog";
+import { searchPage } from "@/app/actions/search";
 import { getCurrentUser } from "@/lib/library";
 import { createClient } from "@/lib/server";
-import type { BookCandidate } from "@/types/book";
-import SearchResult from "./SearchResult";
-
-type OwnedRow = {
-  id: number;
-  book: { isbn13: string | null; isbn10: string | null; google_books_id: string | null } | null;
-};
+import ResultsList from "./ResultsList";
+import SearchBox from "./SearchBox";
 
 function manualHref(title: string, wishlist: boolean) {
   const params = new URLSearchParams();
@@ -32,28 +27,9 @@ export default async function SearchPage({
   if (!user) redirect("/login");
 
   const query = q.trim();
-  const { results, warnings } = query
-    ? await searchCatalog(query)
-    : { results: [] as BookCandidate[], warnings: [] as string[] };
-
-  // Repère les livres déjà dans la bibliothèque
-  const owned = new Map<string, number>();
-  if (results.length > 0) {
-    const { data } = await supabase
-      .from("user_books")
-      .select("id, book:books ( isbn13, isbn10, google_books_id )")
-      .eq("user_id", user.id);
-    for (const row of (data ?? []) as unknown as OwnedRow[]) {
-      for (const key of [row.book?.isbn13, row.book?.isbn10, row.book?.google_books_id]) {
-        if (key) owned.set(key, row.id);
-      }
-    }
-  }
-
-  const ownedId = (c: BookCandidate) =>
-    [c.isbn13, c.isbn10, c.google_books_id]
-      .map((k) => (k ? owned.get(k) : undefined))
-      .find((v) => v !== undefined) ?? null;
+  const { items, warnings, hasMore, nextPage } = query
+    ? await searchPage(query, 0)
+    : { items: [], warnings: [] as string[], hasMore: false, nextPage: 1 };
 
   return (
     <main className="mx-auto w-full max-w-5xl px-4 py-8">
@@ -87,20 +63,7 @@ export default async function SearchPage({
         </Link>
       )}
 
-      <form action="/search" className="mt-4 flex gap-2">
-        {wishlistMode && <input type="hidden" name="to" value="wishlist" />}
-        <input
-          type="search"
-          name="q"
-          defaultValue={query}
-          autoFocus
-          placeholder="Rechercher…"
-          className="field text-base"
-        />
-        <button type="submit" className="btn-primary">
-          Rechercher
-        </button>
-      </form>
+      <SearchBox key={query} query={query} wishlistMode={wishlistMode} />
 
       {warnings.map((w) => (
         <p key={w} className="mt-4 rounded-lg bg-amber-500/10 px-3 py-2 text-sm">
@@ -108,7 +71,7 @@ export default async function SearchPage({
         </p>
       ))}
 
-      {query && results.length === 0 && (
+      {query && items.length === 0 && (
         <p className="mt-10 text-center text-muted">Aucun résultat pour « {query} ».</p>
       )}
 
@@ -121,22 +84,16 @@ export default async function SearchPage({
         </p>
       )}
 
-      <ul className="mt-8 divide-y divide-line">
-        {results.map((candidate) => (
-          <li
-            key={candidate.google_books_id ?? candidate.bnf_ark ?? candidate.isbn13 ?? candidate.title}
-            className="py-4"
-          >
-            <SearchResult
-              candidate={candidate}
-              ownedUserBookId={ownedId(candidate)}
-              quickStatus={wishlistMode ? "wishlist" : undefined}
-            />
-          </li>
-        ))}
-      </ul>
+      <ResultsList
+        key={query}
+        query={query}
+        initial={items}
+        initialHasMore={hasMore}
+        initialNextPage={nextPage}
+        quickStatus={wishlistMode ? "wishlist" : undefined}
+      />
 
-      {results.length > 0 && (
+      {items.length > 0 && (
         <p className="mt-8 text-center text-xs text-muted">
           Sources : Google Books et catalogue de la BnF.
         </p>

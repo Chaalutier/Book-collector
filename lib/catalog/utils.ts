@@ -190,7 +190,8 @@ export function rankSearchResults<T extends Rankable>(results: T[], query: strin
     const have = new Set(
       toWords([r.title, r.subtitle, r.series_title, r.publisher, ...r.contributors.map((c) => c.name)].join(" "))
     );
-    return words.every((w) => have.has(w));
+    // Le dernier mot peut être en cours de frappe (« hunter x hun »)
+    return words.every((w, i) => have.has(w) || (i === words.length - 1 && [...have].some((t) => t.startsWith(w))));
   });
   const sorted = sortByNewest(relevant);
   if (wantedVolume === null) return sorted;
