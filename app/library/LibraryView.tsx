@@ -106,16 +106,24 @@ export default function LibraryView({
     ) as Record<StatusFilter, number>;
   }, [userBooks, category]);
 
+  // Lectures en cours : toujours en tête (sauf filtre sur un autre statut)
+  const reading = useMemo(
+    () => (status === "all" || status === "owned" ? filtered.filter((ub) => ub.status === "reading") : []),
+    [filtered, status]
+  );
+  const rest = useMemo(() => filtered.filter((ub) => !reading.includes(ub)), [filtered, reading]);
+
   const { seriesGroups, standalone } = useMemo(() => {
     const groups = new Map<number, UserBook[]>();
     const alone: UserBook[] = [];
     for (const ub of filtered) {
       const id = ub.book.series?.id;
+      // Une série garde tous ses tomes ; un one-shot en cours n'apparaît qu'en tête
       if (id) groups.set(id, [...(groups.get(id) ?? []), ub]);
-      else alone.push(ub);
+      else if (!reading.includes(ub)) alone.push(ub);
     }
     return { seriesGroups: [...groups.values()], standalone: alone };
-  }, [filtered]);
+  }, [filtered, reading]);
 
   return (
     <div className="mt-6">
@@ -176,8 +184,18 @@ export default function LibraryView({
         <p className="mt-10 text-center text-muted">Aucun livre ne correspond à ces filtres.</p>
       )}
 
+      {reading.length > 0 && (
+        <section className="mt-8">
+          <h2 className="text-lg font-semibold">En cours de lecture</h2>
+          <BookGrid books={reading} />
+        </section>
+      )}
+
       {view === "grid" ? (
-        <BookGrid books={filtered} />
+        <>
+          {reading.length > 0 && rest.length > 0 && <h2 className="mt-10 text-lg font-semibold">Les autres livres</h2>}
+          <BookGrid books={rest} />
+        </>
       ) : (
         <>
           {seriesGroups.length > 0 && (
