@@ -4,7 +4,7 @@ import { guessCategoryFromSignals, mergeSignals } from "./category";
 import { searchGoogleBooks } from "./google-books";
 import { searchOpenLibrary } from "./open-library";
 import type { Theme } from "./themes";
-import { looksLikeIsbn, normalizeTitle } from "./utils";
+import { looksLikeIsbn, normalizeTitle, rankSearchResults, sortByNewest } from "./utils";
 
 export type CatalogSearchResult = {
   results: BookCandidate[];
@@ -46,11 +46,11 @@ export async function searchCatalog(query: string): Promise<CatalogSearchResult>
         : [{ ...fromBnf, cover_url: openLibraryCover(fromBnf.isbn13) }];
   }
 
-  // Rien chez Google ? On tente la BnF en plein texte, puis Open Library
-  if (results.length === 0 && !isbn) {
+  // Peu de résultats pertinents chez Google ? On complète avec la BnF en plein texte, puis Open Library
+  if (!isbn && rankSearchResults(results, q).length < 5) {
     try {
       const fromBnf = await searchBnf(q);
-      results = fromBnf.map((r) => ({ ...r, cover_url: openLibraryCover(r.isbn13) }));
+      results = results.concat(fromBnf.map((r) => ({ ...r, cover_url: openLibraryCover(r.isbn13) })));
     } catch (error) {
       console.error("BnF :", error);
     }
@@ -76,7 +76,11 @@ export async function searchCatalog(query: string): Promise<CatalogSearchResult>
     warnings.length = 0;
   }
 
-  return { results: sortBySeries(dedupe(results), q), warnings };
+  results = dedupe(results);
+  if (isbn) return { results, warnings };
+  const ranked = rankSearchResults(results, q);
+  // Aucun résultat exact (faute de frappe…) : l'ordre des catalogues plutôt qu'une page vide
+  return { results: ranked.length > 0 ? ranked : results, warnings };
 }
 
 function nameTokens(value: string): string[] {
@@ -118,7 +122,7 @@ export async function searchByAuthor(name: string): Promise<CatalogSearchResult>
   }
 
   results = results.filter((r) => r.contributors.some((c) => sameAuthor(author, c.name)));
-  return { results: sortBySeries(dedupe(results), ""), warnings };
+  return { results: sortBySeries(dedupe(results)), warnings };
 }
 
 /**
@@ -155,7 +159,7 @@ export async function searchByPublisher(name: string): Promise<CatalogSearchResu
     return wanted.every((t) => have.has(t));
   });
   // Plus récents d'abord
-  results = dedupe(results).sort((a, b) => (b.published_date ?? "").localeCompare(a.published_date ?? ""));
+  results = sortByNewest(dedupe(results));
   return { results, warnings };
 }
 
@@ -261,10 +265,8 @@ function dedupe(results: BookCandidate[]): BookCandidate[] {
 /**
  * Range les résultats : les tomes d'une même série sont regroupés et triés
  * par numéro (T.1, T.2, T.3…). Les séries gardent leur ordre de pertinence.
- * Si la recherche contient un numéro ("hunter x hunter 12"), ce tome passe en tête.
  */
-function sortBySeries(results: BookCandidate[], query: string): BookCandidate[] {
-  const wantedVolume = Number(query.match(/(?:^|\s|t\.?|tome\s*)(\d{1,3})\s*$/i)?.[1]);
+function sortBySeries(results: BookCandidate[]): BookCandidate[] {
   const groupKey = (c: BookCandidate, i: number) =>
     c.series_title ? `s:${normalizeTitle(c.series_title)}` : `b:${i}`;
 
@@ -278,11 +280,6 @@ function sortBySeries(results: BookCandidate[], query: string): BookCandidate[] 
   return results
     .map((c, i) => ({ c, i, key: groupKey(c, i) }))
     .sort((a, b) => {
-      if (Number.isFinite(wantedVolume)) {
-        const aHit = a.c.volume_number === wantedVolume ? 0 : 1;
-        const bHit = b.c.volume_number === wantedVolume ? 0 : 1;
-        if (aHit !== bHit) return aHit - bHit;
-      }
       const rank = groupRank.get(a.key)! - groupRank.get(b.key)!;
       if (rank !== 0) return rank;
       const va = a.c.volume_number ?? Number.POSITIVE_INFINITY;

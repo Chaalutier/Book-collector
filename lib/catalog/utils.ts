@@ -158,3 +158,41 @@ export function parseUserDate(input: string | null | undefined): string | null |
   }
   return m === null ? String(y) : d === null ? `${y}-${pad(m)}` : `${y}-${pad(m)}-${pad(d)}`;
 }
+
+type Rankable = {
+  title: string;
+  subtitle?: string | null;
+  series_title?: string | null;
+  publisher?: string | null;
+  published_date?: string | null;
+  volume_number?: number | null;
+  contributors: { name: string }[];
+};
+
+/** Plus récents d'abord, livres sans date à la fin */
+export function sortByNewest<T extends Rankable>(results: T[]): T[] {
+  return [...results].sort((a, b) => (b.published_date ?? "").localeCompare(a.published_date ?? ""));
+}
+
+/**
+ * Résultats d'une recherche texte : on écarte ceux qui ne contiennent pas tous les mots
+ * cherchés (Google remonte « Wellington and Napoleon » pour « hunter x hunter »),
+ * puis plus récents d'abord (liste vide si aucun ne correspond). Un n° final (« hunter x hunter 12 ») fait passer ce tome en tête.
+ */
+export function rankSearchResults<T extends Rankable>(results: T[], query: string): T[] {
+  const volumeMatch = query.match(/(?:^|\s|t\.?|tome\s*)(\d{1,3})\s*$/i);
+  const wantedVolume = volumeMatch ? Number(volumeMatch[1]) : null;
+  // « Hunter × Hunter » s'écrit aussi avec le signe ×
+  const toWords = (v: string) => normalizeTitle(v.replace(/×/g, " x ")).split(" ").filter(Boolean);
+  const words = toWords(volumeMatch ? query.slice(0, volumeMatch.index) : query);
+
+  const relevant = results.filter((r) => {
+    const have = new Set(
+      toWords([r.title, r.subtitle, r.series_title, r.publisher, ...r.contributors.map((c) => c.name)].join(" "))
+    );
+    return words.every((w) => have.has(w));
+  });
+  const sorted = sortByNewest(relevant);
+  if (wantedVolume === null) return sorted;
+  return [...sorted.filter((r) => r.volume_number === wantedVolume), ...sorted.filter((r) => r.volume_number !== wantedVolume)];
+}
