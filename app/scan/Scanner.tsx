@@ -33,6 +33,8 @@ export default function Scanner({ initialStatus }: { initialStatus: ReadingStatu
   const [status, setStatus] = useState<ReadingStatus>(initialStatus);
   const [cameraError, setCameraError] = useState<string | null>(null);
   const [manual, setManual] = useState("");
+  // Dernier code lu qui n'est pas un ISBN de livre : on le montre plutôt que de l'ignorer en silence
+  const [ignored, setIgnored] = useState<string | null>(null);
   const [session, setSession] = useState<{ title: string; status: ReadingStatus }[]>([]);
   const [pending, startTransition] = useTransition();
 
@@ -55,7 +57,9 @@ export default function Scanner({ initialStatus }: { initialStatus: ReadingStatu
   const onCode = useCallback(
     (raw: string) => {
       const code = raw.replace(/\D/g, "");
-      if (pausedRef.current || !validIsbn13(code)) return;
+      if (pausedRef.current) return;
+      if (!validIsbn13(code)) return setIgnored(code || raw);
+      setIgnored(null);
       const now = Date.now();
       if (lastRef.current.code === code && now - lastRef.current.at < 3000) return;
       lastRef.current = { code, at: now };
@@ -77,9 +81,25 @@ export default function Scanner({ initialStatus }: { initialStatus: ReadingStatu
         );
         return;
       }
+      const Native = (
+        window as unknown as {
+          BarcodeDetector?: {
+            new (o: { formats: string[] }): { detect(v: HTMLVideoElement): Promise<{ rawValue: string }[]> };
+            getSupportedFormats?: () => Promise<string[]>;
+          };
+        }
+      ).BarcodeDetector;
+      // Certains navigateurs exposent BarcodeDetector sans savoir lire l'EAN-13 : ZXing dans ce cas
+      const nativeEan = Native ? ((await Native.getSupportedFormats?.().catch(() => [])) ?? []).includes("ean_13") : false;
+
       try {
         stream = await navigator.mediaDevices.getUserMedia({
-          video: { facingMode: { ideal: "environment" }, width: { ideal: 1280 }, height: { ideal: 720 } },
+          video: {
+            facingMode: { ideal: "environment" },
+            // Le détecteur natif lit mieux en haute définition ; ZXing (iPhone) serait trop lent
+            width: { ideal: nativeEan ? 1920 : 1280 },
+            height: { ideal: nativeEan ? 1080 : 720 },
+          },
           audio: false,
         });
       } catch {
@@ -88,13 +108,19 @@ export default function Scanner({ initialStatus }: { initialStatus: ReadingStatu
       }
       if (cancelled) return stream.getTracks().forEach((t) => t.stop());
 
+      // Mise au point continue : sans elle, beaucoup d'Android restent flous de près et ne lisent rien
+      const [track] = stream.getVideoTracks();
+      const caps = (track.getCapabilities?.() ?? {}) as { focusMode?: string[] };
+      if (caps.focusMode?.includes("continuous")) {
+        await track.applyConstraints({ advanced: [{ focusMode: "continuous" } as MediaTrackConstraintSet] }).catch(() => {});
+      }
+
       const video = videoRef.current;
       if (!video) return;
       video.srcObject = stream;
       await video.play().catch(() => {});
 
-      const Native = (window as unknown as { BarcodeDetector?: new (o: { formats: string[] }) => { detect(v: HTMLVideoElement): Promise<{ rawValue: string }[]> } }).BarcodeDetector;
-      if (Native) {
+      if (Native && nativeEan) {
         const detector = new Native({ formats: ["ean_13"] });
         let timer: ReturnType<typeof setTimeout>;
         const tick = async () => {
@@ -179,6 +205,11 @@ export default function Scanner({ initialStatus }: { initialStatus: ReadingStatu
             <div className="pointer-events-none absolute inset-0 flex items-center justify-center">
               <div className="h-1/3 w-4/5 rounded-lg border-2 border-white/80 shadow-[0_0_0_9999px_rgba(0,0,0,0.35)]" />
             </div>
+            {phase.kind === "scanning" && ignored && (
+              <p className="absolute inset-x-0 bottom-0 bg-black/60 px-3 py-2 text-center text-xs text-white">
+                Code lu : {ignored} — ce n&apos;est pas un ISBN de livre (978… ou 979…). Vise l&apos;autre code-barres.
+              </p>
+            )}
             {phase.kind !== "scanning" && (
               <div className="absolute inset-0 flex items-center justify-center bg-black/50 text-sm text-white">
                 {phase.kind === "loading" ? <BookLoader scale={0.6} label="Recherche du livre…" className="!py-0 [--book-loader-color:#fff] [--book-loader-text:#fff]" /> : "Scan en pause"}
