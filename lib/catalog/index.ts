@@ -15,9 +15,13 @@ function openLibraryCover(isbn: string | null): string | null {
   return isbn ? `https://covers.openlibrary.org/b/isbn/${isbn}-M.jpg?default=false` : null;
 }
 
+/** Recherche texte : pas de livre sans auteur ni d'édition étrangère (langue inconnue gardée) */
+const isFrenchWithAuthor = (c: BookCandidate) =>
+  c.contributors.length > 0 && (!c.language || ["fr", "fre", "fra"].includes(c.language.toLowerCase()));
+
 /**
- * Recherche : Google Books en priorité (couvertures, pertinence),
- * BnF en secours (ou en complément pour une recherche par ISBN).
+ * Recherche : Google Books (couvertures, résumés) et BnF interrogés en même temps,
+ * car Google tombe souvent en quota. Open Library en dernier recours.
  */
 export async function searchCatalog(query: string): Promise<CatalogSearchResult> {
   const q = query.trim();
@@ -29,7 +33,7 @@ export async function searchCatalog(query: string): Promise<CatalogSearchResult>
   const [google, bnf] = await Promise.allSettled([
     searchGoogleBooks(q, { isbn }),
     // Pour un ISBN, la BnF donne souvent de meilleures infos (série, tome...)
-    isbn ? findBnfByIsbn(isbn).then((r) => (r ? [r] : [])) : Promise.resolve([]),
+    isbn ? findBnfByIsbn(isbn).then((r) => (r ? [r] : [])) : searchBnf(q),
   ]);
 
   let results: BookCandidate[] = google.status === "fulfilled" ? google.value : [];
@@ -46,16 +50,14 @@ export async function searchCatalog(query: string): Promise<CatalogSearchResult>
         : [{ ...fromBnf, cover_url: openLibraryCover(fromBnf.isbn13) }];
   }
 
-  // Peu de résultats pertinents chez Google ? On complète avec la BnF en plein texte, puis Open Library
-  if (!isbn && rankSearchResults(results, q).length < 5) {
-    try {
-      const fromBnf = await searchBnf(q);
-      results = results.concat(fromBnf.map((r) => ({ ...r, cover_url: openLibraryCover(r.isbn13) })));
-    } catch (error) {
-      console.error("BnF :", error);
+  if (!isbn) {
+    if (bnf.status === "fulfilled") {
+      results = results.concat(bnf.value.map((r) => ({ ...r, cover_url: openLibraryCover(r.isbn13) })));
+    } else {
+      console.error("BnF :", bnf.reason);
     }
   }
-  if (results.length === 0) {
+  if (!results.some((r) => isbn || isFrenchWithAuthor(r))) {
     try {
       results = await searchOpenLibrary(q, { isbn });
     } catch (error) {
@@ -78,6 +80,7 @@ export async function searchCatalog(query: string): Promise<CatalogSearchResult>
 
   results = dedupe(results);
   if (isbn) return { results, warnings };
+  results = results.filter(isFrenchWithAuthor);
   const ranked = rankSearchResults(results, q);
   // Aucun résultat exact (faute de frappe…) : l'ordre des catalogues plutôt qu'une page vide
   return { results: ranked.length > 0 ? ranked : results, warnings };
