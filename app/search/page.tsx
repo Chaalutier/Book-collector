@@ -63,7 +63,7 @@ export default async function SearchPage({
         </Link>
       )}
 
-      <SearchBox key={query} query={query} wishlistMode={wishlistMode} />
+      <SearchBox key={`box:${query}`} query={query} wishlistMode={wishlistMode} />
 
       {warnings.map((w) => (
         <p key={w} className="mt-4 rounded-lg bg-amber-500/10 px-3 py-2 text-sm">
@@ -85,7 +85,7 @@ export default async function SearchPage({
       )}
 
       <ResultsList
-        key={query}
+        key={`results:${query}`}
         query={query}
         initial={items}
         initialHasMore={hasMore}
