@@ -1,7 +1,7 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { CalendarEntry } from "@/lib/calendar";
 import { normalizeTitle } from "@/lib/catalog/utils";
-import type { BookCandidate, UserBook } from "@/types/book";
+import type { BookCandidate, Contributor, UserBook } from "@/types/book";
 
 type Row = {
   id: string;
@@ -13,6 +13,7 @@ type Row = {
   url: string | null;
   cover_url: string | null;
   last_seen_at: string;
+  authors: Contributor[] | null;
 };
 
 export type BdCalendar = {
@@ -37,14 +38,13 @@ function volumeTitle(row: Row): string {
 
 /** Sorties BD (bede.fr) au format du calendrier, croisées avec la bibliothèque de l'utilisateur */
 export async function getBdCalendar(supabase: SupabaseClient, userBooks: UserBook[]): Promise<BdCalendar> {
-  const today = new Date().toISOString().slice(0, 10);
+  // Tout l'historique conservé (à venir + passé) : le filtrage se fait dans la page
   const { data, error } = await supabase
     .from("bd_releases")
-    .select("id, release_date, title, series_title, volume_number, publisher, url, cover_url, last_seen_at")
-    .gte("release_date", today)
+    .select("id, release_date, title, series_title, volume_number, publisher, url, cover_url, last_seen_at, authors")
     .order("release_date")
     .order("title")
-    .limit(2000);
+    .limit(5000);
 
   if (error) {
     console.error("Sorties BD :", error);
@@ -100,7 +100,7 @@ export async function getBdCalendar(supabase: SupabaseClient, userBooks: UserBoo
       published_date: row.release_date,
       page_count: null,
       language: "fr",
-      contributors: [],
+      contributors: row.authors ?? [],
     };
     return {
       ...base,

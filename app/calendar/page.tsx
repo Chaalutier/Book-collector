@@ -13,6 +13,7 @@ import ViewSwitch from "./ViewSwitch";
 import { monthSummary } from "./summary";
 
 type View = "list" | "grid";
+type When = "avenir" | "passees" | "tout";
 
 const MONTHS = [
   "Janvier", "Février", "Mars", "Avril", "Mai", "Juin",
@@ -43,11 +44,12 @@ function groupByYearMonth(entries: CalendarEntry[]): YearGroup[] {
 export default async function CalendarPage({
   searchParams,
 }: {
-  searchParams: Promise<{ view?: string; source?: string; suivi?: string }>;
+  searchParams: Promise<{ view?: string; source?: string; suivi?: string; quand?: string }>;
 }) {
-  const { view: requested, source: requestedSource, suivi } = await searchParams;
+  const { view: requested, source: requestedSource, suivi, quand } = await searchParams;
   const source: Source = requestedSource === "bd" ? "bd" : "mine";
   const followedOnly = suivi === "1";
+  const when: When = quand === "passees" || quand === "tout" ? quand : "avenir";
   const supabase = await createClient();
   const user = await getCurrentUser(supabase);
   if (!user) redirect("/login");
@@ -84,11 +86,11 @@ export default async function CalendarPage({
         </Link>
       )}
       <Suspense
-        key={`${source}-${view}-${followedOnly}`}
+        key={`${source}-${view}-${followedOnly}-${when}`}
         fallback={<BookLoader label="Recherche des prochaines sorties…" />}
       >
         {source === "bd" ? (
-          <BdContent userId={user.id} view={view} followedOnly={followedOnly} />
+          <BdContent userId={user.id} view={view} followedOnly={followedOnly} when={when} />
         ) : (
           <CalendarContent userId={user.id} view={view} />
         )}
@@ -144,8 +146,16 @@ async function CalendarContent({ userId, view }: { userId: string; view: View })
 }
 
 /** Liste groupée par année puis par mois */
-function EntriesByMonth({ entries }: { entries: CalendarEntry[] }) {
-  return groupByYearMonth(entries).map(({ year, months }) => (
+function EntriesByMonth({ entries, newestFirst = false }: { entries: CalendarEntry[]; newestFirst?: boolean }) {
+  const groups = groupByYearMonth(entries);
+  if (newestFirst) {
+    groups.reverse();
+    for (const g of groups) {
+      g.months.reverse();
+      for (const m of g.months) m.entries = [...m.entries].reverse();
+    }
+  }
+  return groups.map(({ year, months }) => (
     <section key={year} className="mt-12 first:mt-8">
       <h2 className="border-b-2 border-foreground pb-1 text-5xl font-bold tracking-tight">{year}</h2>
       {months.map(({ month, entries: list }) => (
@@ -168,13 +178,31 @@ function EntriesByMonth({ entries }: { entries: CalendarEntry[] }) {
 }
 
 /** Onglet « Sorties BD » : toutes les sorties relevées sur bede.fr */
-async function BdContent({ userId, view, followedOnly }: { userId: string; view: View; followedOnly: boolean }) {
+async function BdContent({
+  userId,
+  view,
+  followedOnly,
+  when,
+}: {
+  userId: string;
+  view: View;
+  followedOnly: boolean;
+  when: When;
+}) {
   const supabase = await createClient();
   const userBooks = await getUserLibrary(supabase, userId);
   const { entries: all, followed, updatedAt, error } = await getBdCalendar(supabase, userBooks);
-  const entries = followedOnly ? all.filter((e) => e.reasons.length > 0) : all;
   const today = new Date().toISOString().slice(0, 10);
-  const filterHref = (only: boolean) => `/calendar?source=bd&view=${view}${only ? "&suivi=1" : ""}`;
+  const followedAll = followedOnly ? all.filter((e) => e.reasons.length > 0) : all;
+  const upcomingCount = followedAll.filter((e) => e.date >= today).length;
+  const pastCount = followedAll.length - upcomingCount;
+  // La grille mensuelle navigue dans tout l'historique ; la liste suit le filtre de période
+  const entries =
+    view === "grid" || when === "tout"
+      ? followedAll
+      : followedAll.filter((e) => (when === "avenir" ? e.date >= today : e.date < today));
+  const href = (only: boolean, w: When) =>
+    `/calendar?source=bd&view=${view}${only ? "&suivi=1" : ""}${w !== "avenir" ? `&quand=${w}` : ""}`;
 
   if (error) {
     return (
@@ -194,7 +222,7 @@ async function BdContent({ userId, view, followedOnly }: { userId: string; view:
         ].map(({ only, label }) => (
           <Link
             key={label}
-            href={filterHref(only)}
+            href={href(only, when)}
             aria-current={followedOnly === only ? "page" : undefined}
             className={`rounded-full border px-3 py-1 ${
               followedOnly === only ? "border-accent bg-accent text-white" : "border-line bg-card hover:bg-soft"
@@ -203,6 +231,27 @@ async function BdContent({ userId, view, followedOnly }: { userId: string; view:
             {label}
           </Link>
         ))}
+        {view === "list" && (
+          <>
+            <span className="mx-1 h-5 w-px bg-line" aria-hidden="true" />
+            {[
+              { w: "avenir" as const, label: `À venir (${upcomingCount})` },
+              { w: "passees" as const, label: `Passées (${pastCount})` },
+              { w: "tout" as const, label: "Tout" },
+            ].map(({ w, label }) => (
+              <Link
+                key={w}
+                href={href(followedOnly, w)}
+                aria-current={when === w ? "page" : undefined}
+                className={`rounded-full border px-3 py-1 ${
+                  when === w ? "border-accent bg-accent text-white" : "border-line bg-card hover:bg-soft"
+                }`}
+              >
+                {label}
+              </Link>
+            ))}
+          </>
+        )}
       </div>
       <p className="mt-3 text-xs text-muted">
         Source :{" "}
@@ -222,7 +271,11 @@ async function BdContent({ userId, view, followedOnly }: { userId: string; view:
       ) : entries.length === 0 ? (
         <div className="mt-10 rounded-xl border border-dashed border-line p-8 text-center text-sm text-muted">
           <p className="text-base font-medium text-foreground">
-            {followedOnly ? "Aucune sortie annoncée pour tes séries." : "Aucune sortie BD enregistrée pour le moment."}
+            {when === "passees"
+              ? "Aucune sortie passée enregistrée."
+              : followedOnly
+                ? "Aucune sortie annoncée pour tes séries."
+                : "Aucune sortie BD enregistrée pour le moment."}
           </p>
           <p className="mt-2">
             {followedOnly
@@ -231,7 +284,7 @@ async function BdContent({ userId, view, followedOnly }: { userId: string; view:
           </p>
         </div>
       ) : (
-        <EntriesByMonth entries={entries} />
+        <EntriesByMonth entries={entries} newestFirst={when === "passees"} />
       )}
     </>
   );

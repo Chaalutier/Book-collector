@@ -36,10 +36,15 @@ const norm = (s: unknown) =>
   String(s ?? "").normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase().trim();
 const clean = (s: unknown) => String(s ?? "").replace(/\s+/g, " ").trim();
 
+/** Titres de jour : « Sorties BD du … », « Nouveautés BD du … », « 21 albums BD sortis le 1 octobre 2026 » */
+function isReleaseHeading(t: string): boolean {
+  return t.startsWith("sorties") || t.startsWith("nouveautes") || /^\d+ albums? bd sorti/.test(t);
+}
+
 /** "Sorties BD du mercredi 14 octobre 2026" → "2026-10-14" */
 export function parseHeadingDate(text: string): string | null {
   const t = norm(text);
-  if (!t.startsWith("sorties")) return null;
+  if (!isReleaseHeading(t)) return null;
   const m = t.match(/(\d{1,2})(?:er)?\s+([a-z]+)\s+(\d{4})/);
   if (!m || !MONTHS[m[2]]) return null;
   const pad = (n: number) => String(n).padStart(2, "0");
@@ -89,7 +94,7 @@ export function parseBedePage(html: string, page = "bd"): BedeRelease[] {
     if (/^h[1-4]$/.test(tag)) {
       const text = clean($(el).text());
       const date = parseHeadingDate(text);
-      currentDate = date ?? (norm(text).startsWith("sorties") ? currentDate : null);
+      currentDate = date ?? (isReleaseHeading(norm(text)) ? currentDate : null);
       return;
     }
     if (tag !== "img" || !currentDate) return;
@@ -142,6 +147,7 @@ export function parseBedePage(html: string, page = "bd"): BedeRelease[] {
         .get()
         .find((h) => h && !/preview-/.test(h)) ?? $(el).closest("a[href]").attr("href");
 
+    const hash = card.find("[data-album]").addBack("[data-album]").first().attr("data-album");
     const { series, volume } = splitSeries(title);
     out.push({
       id,
@@ -150,7 +156,11 @@ export function parseBedePage(html: string, page = "bd"): BedeRelease[] {
       series_title: series,
       volume_number: volume,
       publisher: publisher?.slice(0, 200) || null,
-      url: href ? new URL(href, BEDE_BASE).href : `${BEDE_BASE}/${page}`,
+      url: href
+        ? new URL(href, BEDE_BASE).href
+        : hash
+          ? `${BEDE_BASE}/#${hash}` // lien direct de l'album (les couvertures sont des boutons)
+          : `${BEDE_BASE}/${page}`,
       cover_url: new URL(src, BEDE_BASE).href,
       page,
     });

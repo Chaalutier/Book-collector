@@ -1,8 +1,21 @@
 import { createClient as createSupabaseClient } from "@supabase/supabase-js";
 import { BEDE_BASE, parseBedePage, type BedeRelease } from "./parse";
 
-/** Pages lues sur bede.fr (« bd », et éventuellement « manga », « comics ») */
+/** Page des sorties à venir (« bd », et éventuellement « manga », « comics ») */
 const PAGES = ["bd"];
+/** Pages mensuelles relues pour garder l'historique : le mois en cours et les précédents */
+const HISTORY_MONTHS = 3;
+const MONTH_NAMES = ["janvier", "fevrier", "mars", "avril", "mai", "juin", "juillet", "aout", "septembre", "octobre", "novembre", "decembre"];
+/** Les sorties passées sont conservées 2 ans */
+const KEEP_DAYS = 730;
+
+/** ["sorties-bd-octobre-2026", "sorties-bd-septembre-2026", …] */
+function historyPages(now = new Date()): string[] {
+  return Array.from({ length: HISTORY_MONTHS }, (_, i) => {
+    const d = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() - i, 1));
+    return `sorties-bd-${MONTH_NAMES[d.getUTCMonth()]}-${d.getUTCFullYear()}`;
+  });
+}
 /** En dessous, on considère que la page a changé de structure : on ne touche à rien */
 const MIN_EXPECTED = 20;
 const USER_AGENT = "Bouck/1.0 (bibliotheque personnelle, avec l'accord de bede.fr)";
@@ -40,18 +53,27 @@ export async function syncBdReleases(): Promise<SyncResult> {
   try {
     const all: BedeRelease[] = [];
     for (const page of PAGES) all.push(...parseBedePage(await fetchPage(page), page));
+    // Historique : une page mensuelle manquante n'est pas bloquante
+    for (const page of historyPages()) {
+      try {
+        all.push(...parseBedePage(await fetchPage(page), page));
+      } catch (e) {
+        console.warn("Historique sorties BD ignoré :", page, e);
+      }
+    }
 
     const today = new Date().toISOString().slice(0, 10);
     const byId = new Map<string, BedeRelease>();
-    for (const r of all) if (r.date >= today && !byId.has(r.id)) byId.set(r.id, r);
+    for (const r of all) if (!byId.has(r.id)) byId.set(r.id, r);
     const releases = [...byId.values()].sort((a, b) => a.date.localeCompare(b.date));
 
-    if (releases.length < MIN_EXPECTED) {
+    const upcoming = releases.filter((r) => r.date >= today).length;
+    if (upcoming < MIN_EXPECTED) {
       return {
         ...empty,
         ok: false,
-        found: releases.length,
-        error: `Seulement ${releases.length} sorties trouvées : la page bede.fr a peut-être changé. Rien n'a été modifié.`,
+        found: upcoming,
+        error: `Seulement ${upcoming} sorties trouvées : la page bede.fr a peut-être changé. Rien n'a été modifié.`,
       };
     }
 
@@ -75,8 +97,8 @@ export async function syncBdReleases(): Promise<SyncResult> {
       if (error) throw new Error(`Enregistrement impossible : ${error.message}`);
     }
 
-    // Sorties à venir qui ont disparu de bede.fr (annulées / reportées sans date), et sorties passées depuis 2 mois
-    const twoMonthsAgo = new Date(Date.now() - 60 * 86400_000).toISOString().slice(0, 10);
+    // Sorties à venir qui ont disparu de bede.fr (annulées / reportées sans date), et sorties passées depuis 2 ans
+    const twoMonthsAgo = new Date(Date.now() - KEEP_DAYS * 86400_000).toISOString().slice(0, 10);
     const { count: gone, error: goneError } = await supabase
       .from("bd_releases")
       .delete({ count: "exact" })

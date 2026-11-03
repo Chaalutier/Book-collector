@@ -4,6 +4,10 @@
     {
       "path": "/api/cron/sorties-bd",
       "schedule": "0 4 1,15 * *"
+    },
+    {
+      "path": "/api/cron/sorties-bd?step=authors",
+      "schedule": "30 4 * * *"
     }
   ]
 }
