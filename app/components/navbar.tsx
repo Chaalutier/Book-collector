@@ -5,6 +5,7 @@ import { getCurrentUser, getProfile } from "@/lib/library";
 import { createClient } from "@/lib/server";
 import Avatar from "./Avatar";
 import BottomTabs from "./BottomTabs";
+import Logo from "./Logo";
 
 /** Données de la navigation, partagées entre la barre du haut et celle du bas (une seule requête) */
 const getNavData = cache(async () => {
@@ -36,8 +37,8 @@ export default async function Navbar() {
   return (
     <nav className="sticky top-0 z-10 border-b border-line bg-background/90 backdrop-blur">
       <div className="mx-auto flex max-w-6xl items-center justify-between gap-4 px-4 py-3">
-        <Link href={user ? "/library" : "/"} className="text-lg font-bold">
-          📚 Bouck
+        <Link href={user ? "/library" : "/"} aria-label="Bouck, accueil">
+          <Logo size={32} />
         </Link>
 
         {user ? (

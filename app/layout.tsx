@@ -19,7 +19,10 @@ export const metadata: Metadata = {
   description: "Gère ta bibliothèque : romans, essais, mangas et BD.",
   applicationName: "Bouck",
   appleWebApp: { capable: true, title: "Bouck", statusBarStyle: "default" },
-  icons: { icon: "/favicon.ico", apple: "/icons/icon-192.png" },
+  icons: {
+    icon: [{ url: "/icons/icon.svg", type: "image/svg+xml" }, { url: "/favicon.ico", sizes: "any" }],
+    apple: "/icons/icon-192.png",
+  },
 };
 
 export const viewport: Viewport = {
