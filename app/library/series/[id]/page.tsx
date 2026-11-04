@@ -4,6 +4,7 @@ import BookCard from "@/app/components/BookCard";
 import { CATEGORY_LABELS, formatContributors, formatVolume } from "@/lib/labels";
 import { getCurrentUser, getUserLibrary, getUserSeries, missingVolumes } from "@/lib/library";
 import { createClient } from "@/lib/server";
+import SeriesCoverUpload from "./SeriesCoverUpload";
 import SeriesForm from "./SeriesForm";
 
 export default async function SeriesPage({ params }: { params: Promise<{ id: string }> }) {
@@ -30,6 +31,15 @@ export default async function SeriesPage({ params }: { params: Promise<{ id: str
   );
   const contributors = books[0]?.book.contributors ?? [];
 
+  // Colonne ajoutée par une migration : on ignore l'erreur tant qu'elle n'est pas exécutée
+  const { data: coverRow } = await supabase.from("series").select("cover_url").eq("id", seriesId).maybeSingle();
+  const customCover = (coverRow as { cover_url?: string | null } | null)?.cover_url ?? null;
+  const volumeCovers = books
+    .filter((b) => b.book.cover_url)
+    .sort((a, b) => (a.book.volume_number ?? 0) - (b.book.volume_number ?? 0))
+    .map((b) => ({ url: b.book.cover_url as string, label: b.book.title }));
+  const seriesCover = customCover ?? volumeCovers[0]?.url ?? null;
+
   // Séries candidates à une fusion (même catégorie, dans ma bibliothèque)
   const otherSeries = [
     ...new Map(
@@ -46,7 +56,16 @@ export default async function SeriesPage({ params }: { params: Promise<{ id: str
         ← Ma bibliothèque
       </Link>
 
-      <header className="mt-4">
+      <div className="mt-4 flex gap-5">
+      <SeriesCoverUpload
+        seriesId={series.id}
+        userId={user.id}
+        title={series.title}
+        cover={seriesCover}
+        custom={!!customCover}
+        volumeCovers={volumeCovers}
+      />
+      <header className="min-w-0 flex-1">
         <p className="text-sm text-muted">{CATEGORY_LABELS[series.category]} · série</p>
         <h1 className="text-3xl font-bold">{series.title}</h1>
         {contributors.length > 0 && (
@@ -66,6 +85,7 @@ export default async function SeriesPage({ params }: { params: Promise<{ id: str
           </p>
         )}
       </header>
+      </div>
 
       <details className="mt-6 rounded-xl border border-line bg-card p-4">
         <summary className="cursor-pointer text-sm font-medium">Modifier la série (nom, tomes parus, fusion)</summary>

@@ -46,7 +46,7 @@ export default function BookCover({
       alt={`Couverture de ${title}`}
       loading="lazy"
       onError={() => setFailed({ src, count: attempt + 1 })}
-      className={`aspect-[2/3] w-full rounded-md bg-line object-cover shadow-sm ${className}`}
+      className={`aspect-[2/3] w-full rounded-md object-cover shadow-sm ${className}`}
     />
   );
 }

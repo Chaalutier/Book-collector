@@ -31,6 +31,16 @@ export default async function LibraryPage({
     );
   }
 
+  // Couvertures choisies pour les séries (colonne ajoutée par migration : erreur ignorée si absente)
+  const seriesIds = [...new Set(userBooks.map((ub) => ub.book.series?.id).filter((v): v is number => !!v))];
+  const seriesCovers: Record<number, string> = {};
+  if (seriesIds.length > 0) {
+    const { data: coverRows } = await supabase.from("series").select("id, cover_url").in("id", seriesIds);
+    for (const row of (coverRows ?? []) as { id: number; cover_url: string | null }[]) {
+      if (row.cover_url) seriesCovers[row.id] = row.cover_url;
+    }
+  }
+
   return (
     <main className="mx-auto w-full max-w-6xl px-4 py-8">
       <div className="flex flex-wrap items-end justify-between gap-4">
@@ -78,6 +88,7 @@ export default async function LibraryPage({
           // Remonte la vue quand on arrive par un lien filtré (ex. bouton Wishlist du menu)
           key={`${params.status ?? ""}|${params.category ?? ""}|${params.view ?? ""}`}
           userBooks={userBooks}
+          seriesCovers={seriesCovers}
           initialStatus={params.status}
           initialCategory={params.category}
           initialQuery={params.q}

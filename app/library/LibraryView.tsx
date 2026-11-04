@@ -43,12 +43,15 @@ function bySeriesThenVolume(a: UserBook, b: UserBook) {
 
 export default function LibraryView({
   userBooks,
+  seriesCovers = {},
   initialStatus,
   initialCategory,
   initialQuery,
   initialView,
 }: {
   userBooks: UserBook[];
+  /** Couvertures choisies pour les séries (id de série → URL) */
+  seriesCovers?: Record<number, string>;
   initialStatus?: string;
   initialCategory?: string;
   initialQuery?: string;
@@ -203,7 +206,7 @@ export default function LibraryView({
               <h2 className="mb-4 text-lg font-semibold">Séries</h2>
               <div className="book-grid">
                 {seriesGroups.map((group) => (
-                  <SeriesCard key={group[0].book.series!.id} books={group} />
+                  <SeriesCard key={group[0].book.series!.id} books={group} cover={seriesCovers[group[0].book.series!.id]} />
                 ))}
               </div>
             </section>
@@ -230,9 +233,9 @@ function BookGrid({ books }: { books: UserBook[] }) {
   );
 }
 
-function SeriesCard({ books }: { books: UserBook[] }) {
+function SeriesCard({ books, cover: chosenCover }: { books: UserBook[]; cover?: string }) {
   const series = books[0].book.series!;
-  const cover = books.find((b) => b.book.cover_url)?.book.cover_url ?? null;
+  const cover = chosenCover ?? books.find((b) => b.book.cover_url)?.book.cover_url ?? null;
   const read = books.filter((b) => b.status === "read").length;
   const owned = books.filter((b) => !NOT_ON_SHELF.includes(b.status)).length;
   const volumes = books.map((b) => b.book.volume_number).filter((v): v is number => v !== null);
@@ -242,11 +245,7 @@ function SeriesCard({ books }: { books: UserBook[] }) {
   return (
     <Link href={`/library/series/${series.id}`} className="group flex flex-col gap-2">
       <div className="relative transition group-hover:-translate-y-0.5">
-        {/* Effet "pile de tomes" */}
-        <div className="absolute inset-0 translate-x-1 -translate-y-1 rounded-md bg-line" />
-        <div className="relative">
-          <BookCover src={cover} title={series.title} />
-        </div>
+        <BookCover src={cover} title={series.title} />
         <span className="absolute right-1 bottom-1 rounded bg-black/75 px-1 py-0.5 text-[10px] font-medium text-white">
           {books.length} tome{books.length > 1 ? "s" : ""}
         </span>

@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useRef, useState, useTransition } from "react";
 import { addBook, lookupIsbn } from "@/app/actions/library";
 import BookCover from "@/app/components/BookCover";
@@ -37,6 +38,7 @@ export default function Scanner({ initialStatus }: { initialStatus: ReadingStatu
   const [ignored, setIgnored] = useState<string | null>(null);
   const [session, setSession] = useState<{ title: string; status: ReadingStatus }[]>([]);
   const [pending, startTransition] = useTransition();
+  const router = useRouter();
 
   const lookup = useCallback((isbn: string) => {
     pausedRef.current = true;
@@ -45,6 +47,11 @@ export default function Scanner({ initialStatus }: { initialStatus: ReadingStatu
     lookupIsbn(isbn).then((result) => {
       if (!result.ok) return setPhase({ kind: "error", message: result.error });
       const data = result.data;
+      // Déjà dans la bibliothèque : on ouvre directement sa fiche (le scan reste en pause pendant la navigation)
+      if (data?.ownedUserBookId) {
+        navigator.vibrate?.([40, 60, 40]);
+        return router.push(`/library/${data.ownedUserBookId}`);
+      }
       if (!data?.candidate && !data?.ownedUserBookId) return setPhase({ kind: "notfound", isbn });
       if (data?.candidate) {
         setPhase({ kind: "found", candidate: data.candidate, ownedUserBookId: data.ownedUserBookId ?? null });
@@ -52,7 +59,7 @@ export default function Scanner({ initialStatus }: { initialStatus: ReadingStatu
         setPhase({ kind: "error", message: "Ce livre est déjà dans ta bibliothèque." });
       }
     }).catch(() => setPhase({ kind: "error", message: "Recherche impossible pour le moment." }));
-  }, []);
+  }, [router]);
 
   const onCode = useCallback(
     (raw: string) => {

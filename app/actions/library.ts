@@ -399,6 +399,43 @@ export async function updateSeries(
   return { ok: true, message: "Série mise à jour." };
 }
 
+/** Choisit (ou retire avec null) l'image qui représente une série dans la bibliothèque */
+export async function setSeriesCover(seriesId: number, url: string | null): Promise<ActionResult> {
+  const { supabase, user } = await requireUser();
+  if (!user) return { ok: false, error: "Non connecté." };
+  if (!Number.isInteger(seriesId)) return { ok: false, error: "Série invalide." };
+
+  if (url !== null) {
+    const base = process.env.NEXT_PUBLIC_SUPABASE_URL;
+    if (!base || !url.startsWith(`${base}/storage/v1/object/public/covers/`)) {
+      return { ok: false, error: "Image invalide." };
+    }
+  }
+
+  // Il faut avoir au moins un tome de la série dans sa bibliothèque
+  const { data: owned } = await supabase
+    .from("user_books")
+    .select("id, book:books!inner ( series_id )")
+    .eq("user_id", user.id)
+    .eq("book.series_id", seriesId)
+    .limit(1);
+  if (!owned || owned.length === 0) return { ok: false, error: "Série introuvable dans ta bibliothèque." };
+
+  const { error } = await supabase.from("series").update({ cover_url: url }).eq("id", seriesId);
+  if (error) {
+    console.error("setSeriesCover :", error);
+    return {
+      ok: false,
+      error:
+        error.code === "42703"
+          ? "Exécute la migration 20261021000000_couverture_serie.sql dans Supabase."
+          : "Impossible d'enregistrer la couverture.",
+    };
+  }
+  revalidatePath("/library", "layout");
+  return { ok: true, message: "Couverture de la série enregistrée." };
+}
+
 /** Fusionne une série (doublon) dans une autre, puis ouvre la série cible */
 export async function mergeSeries(formData: FormData) {
   const { supabase, user } = await requireUser();
@@ -517,8 +554,8 @@ export async function lookupIsbn(
       .in("book_id", bookIds)
       .maybeSingle();
     if (owned) {
-      const found = await searchCatalog(isbn13).catch(() => null);
-      return { ok: true, data: { candidate: found?.results[0] ?? null, ownedUserBookId: owned.id } };
+      // Déjà possédé : inutile d'interroger les catalogues, le scan ouvre directement la fiche
+      return { ok: true, data: { candidate: null, ownedUserBookId: owned.id } };
     }
   }
 
