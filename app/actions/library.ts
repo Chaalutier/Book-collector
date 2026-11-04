@@ -340,6 +340,32 @@ export async function removeFromLibrary(formData: FormData) {
   redirect("/library");
 }
 
+/** Retire un livre de la wishlist (ou des commandes en cours) sans quitter la page */
+export async function removeFromWishlist(userBookId: number): Promise<ActionResult> {
+  const { supabase, user } = await requireUser();
+  if (!user) return { ok: false, error: "Non connecté." };
+  if (!Number.isInteger(userBookId)) return { ok: false, error: "Livre invalide." };
+
+  // Garde-fou : on ne supprime ici que les livres pas encore possédés
+  const { data, error } = await supabase
+    .from("user_books")
+    .delete()
+    .eq("id", userBookId)
+    .eq("user_id", user.id)
+    .in("status", ["wishlist", "ordered"])
+    .select("id");
+  if (error) {
+    console.error("removeFromWishlist :", error);
+    return { ok: false, error: "Suppression impossible." };
+  }
+  if (!data || data.length === 0) return { ok: false, error: "Ce livre n'est plus dans la wishlist." };
+
+  revalidatePath("/library", "layout");
+  revalidatePath("/wishlist");
+  revalidatePath("/calendar");
+  return { ok: true, message: "Retiré." };
+}
+
 /** Mise à jour d'une série (nombre de tomes parus, terminée ou non) */
 export async function updateSeries(
   _prev: ActionResult | null,

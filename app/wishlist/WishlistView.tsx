@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useState, useTransition } from "react";
+import { removeFromWishlist } from "@/app/actions/library";
 import { detectOrigins } from "@/app/actions/origin";
 import { formatDate } from "@/lib/labels";
 import { isUpcoming } from "@/lib/calendar-shared";
@@ -42,12 +43,42 @@ function MiniCover({ src, title }: { src: string | null; title: string }) {
 }
 
 function Row({ item, muted }: { item: WishItem; muted?: boolean }) {
+  const router = useRouter();
   const upcoming = isUpcoming(item.date);
+  const [confirming, setConfirming] = useState(false);
+  const [removed, setRemoved] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [pending, startTransition] = useTransition();
+
+  // Deux appuis pour retirer : le premier demande confirmation (évite les faux clics au pouce)
+  useEffect(() => {
+    if (!confirming) return;
+    const t = setTimeout(() => setConfirming(false), 4000);
+    return () => clearTimeout(t);
+  }, [confirming]);
+
+  if (removed) return null;
+
+  const remove = () => {
+    if (!confirming) return setConfirming(true);
+    setError(null);
+    startTransition(async () => {
+      const result = await removeFromWishlist(item.id);
+      if (!result.ok) {
+        setConfirming(false);
+        return setError(result.error);
+      }
+      setRemoved(true);
+      router.refresh();
+    });
+  };
+
   return (
     <li>
+     <div className="flex items-center gap-1">
       <Link
         href={`/library/${item.id}`}
-        className={`flex items-center gap-3 py-2 active:bg-soft ${muted ? "opacity-70" : ""}`}
+        className={`flex min-w-0 flex-1 items-center gap-3 py-2 active:bg-soft ${muted ? "opacity-70" : ""}`}
       >
         <MiniCover src={item.cover} title={item.title} />
         <div className="min-w-0 flex-1">
@@ -75,6 +106,19 @@ function Row({ item, muted }: { item: WishItem; muted?: boolean }) {
           )}
         </div>
       </Link>
+      <button
+        type="button"
+        onClick={remove}
+        disabled={pending}
+        aria-label={confirming ? `Confirmer : retirer ${item.title}` : `Retirer ${item.title} de la wishlist`}
+        className={`shrink-0 rounded-full px-2.5 py-2 text-xs transition ${
+          confirming ? "bg-red-600 font-medium text-white" : "text-muted hover:bg-soft hover:text-red-600"
+        }`}
+      >
+        {pending ? "…" : confirming ? "Retirer ?" : "✕"}
+      </button>
+     </div>
+     {error && <p className="pb-1 text-xs text-red-600">{error}</p>}
     </li>
   );
 }
